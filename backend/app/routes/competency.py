@@ -1,7 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
+from app.core.security import get_current_user
 from app.db.database import get_db
+from app.db.models.user import User
 from app.schemas.competency import (
     CompetencyCreate,
     CompetencyResponse,
@@ -19,15 +21,11 @@ from app.services.competency_service import (
     update_user_competency,
 )
 
+
 router = APIRouter(
     prefix="/api/competencies",
     tags=["Competencies"],
 )
-
-
-# Temporary development user.
-# JWT integration ke baad authenticated user dependency use hogi.
-DEV_USER_ID = 1
 
 
 @router.get(
@@ -48,12 +46,14 @@ def list_competencies(
 def add_competency(
     competency_data: CompetencyCreate,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     try:
         return create_competency(
             db,
             competency_data,
         )
+
     except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -67,10 +67,11 @@ def add_competency(
 )
 def list_my_competencies(
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     return get_user_competencies(
         db,
-        DEV_USER_ID,
+        current_user.id,
     )
 
 
@@ -82,13 +83,15 @@ def list_my_competencies(
 def add_my_competency(
     competency_data: UserCompetencyCreate,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     try:
         return add_user_competency(
             db,
-            DEV_USER_ID,
+            current_user.id,
             competency_data,
         )
+
     except ValueError as exc:
         message = str(exc)
 
@@ -112,10 +115,11 @@ def update_my_competency(
     competency_id: int,
     competency_data: UserCompetencyUpdate,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     user_competency = get_user_competency(
         db,
-        DEV_USER_ID,
+        current_user.id,
         competency_id,
     )
 
@@ -139,10 +143,11 @@ def update_my_competency(
 def delete_my_competency(
     competency_id: int,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     user_competency = get_user_competency(
         db,
-        DEV_USER_ID,
+        current_user.id,
         competency_id,
     )
 

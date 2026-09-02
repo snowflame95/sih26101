@@ -8,6 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.core.roles import SUPPORTED_ROLES
 from app.db.database import get_db
 from app.db.models.user import User
 
@@ -88,6 +89,12 @@ def get_current_user(
 
 
 def require_role(*allowed_roles: str):
+    invalid_roles = set(allowed_roles) - SUPPORTED_ROLES
+    if invalid_roles:
+        raise ValueError(
+            f"Unsupported roles: {', '.join(sorted(invalid_roles))}"
+        )
+
     def role_checker(
         current_user: User = Depends(get_current_user),
     ) -> User:

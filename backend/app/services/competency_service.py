@@ -34,6 +34,7 @@ def create_competency(
     db: Session,
     competency_data: CompetencyCreate,
 ) -> Competency:
+
     existing_competency = db.scalar(
         select(Competency).where(
             Competency.name == competency_data.name
@@ -65,8 +66,12 @@ def get_user_competencies(
     return list(
         db.scalars(
             select(UserCompetency)
-            .options(joinedload(UserCompetency.competency))
-            .where(UserCompetency.user_id == user_id)
+            .options(
+                joinedload(UserCompetency.competency)
+            )
+            .where(
+                UserCompetency.user_id == user_id
+            )
             .order_by(UserCompetency.id)
         ).all()
     )
@@ -79,6 +84,9 @@ def get_user_competency(
 ) -> UserCompetency | None:
     return db.scalar(
         select(UserCompetency)
+        .options(
+            joinedload(UserCompetency.competency)
+        )
         .where(
             UserCompetency.user_id == user_id,
             UserCompetency.competency_id == competency_id,
@@ -91,6 +99,7 @@ def add_user_competency(
     user_id: int,
     competency_data: UserCompetencyCreate,
 ) -> UserCompetency:
+
     competency = get_competency_by_id(
         db,
         competency_data.competency_id,
@@ -119,9 +128,12 @@ def add_user_competency(
 
     db.add(user_competency)
     db.commit()
-    db.refresh(user_competency)
 
-    return user_competency
+    return get_user_competency(
+        db,
+        user_id,
+        competency_data.competency_id,
+    )
 
 
 def update_user_competency(
@@ -129,6 +141,7 @@ def update_user_competency(
     user_competency: UserCompetency,
     competency_data: UserCompetencyUpdate,
 ) -> UserCompetency:
+
     update_data = competency_data.model_dump(
         exclude_unset=True
     )
@@ -137,9 +150,12 @@ def update_user_competency(
         setattr(user_competency, field, value)
 
     db.commit()
-    db.refresh(user_competency)
 
-    return user_competency
+    return get_user_competency(
+        db,
+        user_competency.user_id,
+        user_competency.competency_id,
+    )
 
 
 def delete_user_competency(

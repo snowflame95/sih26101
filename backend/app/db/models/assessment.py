@@ -1,7 +1,20 @@
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, JSON, String, Text
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy import (
+    Boolean,
+    DateTime,
+    ForeignKey,
+    Integer,
+    JSON,
+    String,
+    Text,
+    UniqueConstraint,
+)
+from sqlalchemy.orm import (
+    Mapped,
+    mapped_column,
+    relationship,
+)
 
 from app.db.database import Base
 
@@ -37,7 +50,9 @@ class Assessment(Base):
         default=lambda: datetime.now(timezone.utc),
     )
 
-    questions: Mapped[list["AssessmentQuestion"]] = relationship(
+    questions: Mapped[
+        list["AssessmentQuestion"]
+    ] = relationship(
         "AssessmentQuestion",
         back_populates="assessment",
         cascade="all, delete-orphan",
@@ -54,13 +69,19 @@ class AssessmentQuestion(Base):
     )
 
     assessment_id: Mapped[int] = mapped_column(
-        ForeignKey("assessments.id", ondelete="CASCADE"),
+        ForeignKey(
+            "assessments.id",
+            ondelete="CASCADE",
+        ),
         nullable=False,
         index=True,
     )
 
     competency_id: Mapped[int] = mapped_column(
-        ForeignKey("competencies.id", ondelete="CASCADE"),
+        ForeignKey(
+            "competencies.id",
+            ondelete="CASCADE",
+        ),
         nullable=False,
         index=True,
     )
@@ -91,7 +112,9 @@ class AssessmentQuestion(Base):
         nullable=True,
     )
 
-    assessment: Mapped["Assessment"] = relationship(
+    assessment: Mapped[
+        "Assessment"
+    ] = relationship(
         "Assessment",
         back_populates="questions",
     )
@@ -107,13 +130,19 @@ class AssessmentAttempt(Base):
     )
 
     user_id: Mapped[int] = mapped_column(
-        ForeignKey("users.id", ondelete="CASCADE"),
+        ForeignKey(
+            "users.id",
+            ondelete="CASCADE",
+        ),
         nullable=False,
         index=True,
     )
 
     assessment_id: Mapped[int] = mapped_column(
-        ForeignKey("assessments.id", ondelete="CASCADE"),
+        ForeignKey(
+            "assessments.id",
+            ondelete="CASCADE",
+        ),
         nullable=False,
         index=True,
     )
@@ -152,13 +181,19 @@ class AssessmentAnswer(Base):
     )
 
     attempt_id: Mapped[int] = mapped_column(
-        ForeignKey("assessment_attempts.id", ondelete="CASCADE"),
+        ForeignKey(
+            "assessment_attempts.id",
+            ondelete="CASCADE",
+        ),
         nullable=False,
         index=True,
     )
 
     question_id: Mapped[int] = mapped_column(
-        ForeignKey("assessment_questions.id", ondelete="CASCADE"),
+        ForeignKey(
+            "assessment_questions.id",
+            ondelete="CASCADE",
+        ),
         nullable=False,
         index=True,
     )
@@ -172,4 +207,35 @@ class AssessmentAnswer(Base):
         Boolean,
         nullable=False,
         default=False,
+    )
+
+
+class AssessmentAssignment(Base):
+    __tablename__ = "assessment_assignments"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    assessment_id: Mapped[int] = mapped_column(
+        ForeignKey("assessments.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    learner_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    assigned_by: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="assigned")
+    assigned_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc)
+    )
+    due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    feedback: Mapped[str | None] = mapped_column(Text, nullable=True)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    assessment = relationship("Assessment")
+    learner = relationship("User", foreign_keys=[learner_id])
+    assigner = relationship("User", foreign_keys=[assigned_by])
+
+    __table_args__ = (
+        UniqueConstraint("assessment_id", "learner_id", "status", name="uq_active_assessment_assignment"),
     )

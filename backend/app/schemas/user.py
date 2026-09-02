@@ -1,5 +1,7 @@
 from pydantic import BaseModel, EmailStr, Field
 
+from app.core.roles import UserRole
+
 
 class UserCreate(BaseModel):
     email: EmailStr
@@ -7,7 +9,7 @@ class UserCreate(BaseModel):
         min_length=8,
         max_length=128,
     )
-    role: str = "learner"
+    role: UserRole = UserRole.LEARNER
 
 
 class UserLogin(BaseModel):

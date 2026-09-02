@@ -1,6 +1,7 @@
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.roles import UserRole
 from app.core.security import hash_password, verify_password
 from app.db.models.user import User
 from app.schemas.user import UserCreate
@@ -35,7 +36,7 @@ def create_user(
         hashed_password=hash_password(
             user_data.password
         ),
-        role=user_data.role,
+        role=UserRole.LEARNER.value,
     )
 
     db.add(user)
