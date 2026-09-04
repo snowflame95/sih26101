@@ -2,538 +2,595 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 
 import assessmentApi from "../api/assessmentApi";
-import competencyApi from "../api/competencyApi";
 import ErrorMessage from "../components/ErrorMessage";
 import LoadingSpinner from "../components/LoadingSpinner";
 
-const createEmptyQuestion = (competencyId = "") => ({
-  competency_id: competencyId,
-  question_text: "",
-  options: "",
-  correct_answer: "",
-  difficulty: "medium",
-  explanation: "",
-});
-
-const createEmptyForm = (competencyId = "") => ({
-  title: "",
-  description: "",
-  questions: [createEmptyQuestion(competencyId)],
-});
-
-export default function TrainerAssessmentsPage() {
+export default function TrainerAssignmentsPage() {
   const [assessments, setAssessments] = useState([]);
-  const [competencies, setCompetencies] = useState([]);
-  const [form, setForm] = useState(createEmptyForm());
-  const [isLoading, setIsLoading] = useState(true);
-  const [isSaving, setIsSaving] = useState(false);
+  const [assignments, setAssignments] = useState([]);
+
+  const [assessmentId, setAssessmentId] = useState("");
+  const [learnerId, setLearnerId] = useState("");
+
+  const [expandedAssignmentId, setExpandedAssignmentId] =
+    useState(null);
+
+  const [assignmentDetails, setAssignmentDetails] =
+    useState({});
+
+  const [loading, setLoading] = useState(true);
+  const [detailsLoading, setDetailsLoading] =
+    useState(false);
+
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
-  const load = async () => {
-    setIsLoading(true);
-
-    try {
-      const [assessmentData, competencyData] = await Promise.all([
-        assessmentApi.listManageAssessments(),
-        competencyApi.getAllCompetencies(),
-      ]);
-
-      const loadedAssessments = assessmentData || [];
-      const loadedCompetencies = competencyData || [];
-
-      setAssessments(loadedAssessments);
-      setCompetencies(loadedCompetencies);
-
-      setForm((previous) => {
-        if (
-          previous.questions.length > 0 &&
-          previous.questions.some((question) => question.question_text || question.options)
-        ) {
-          return previous;
-        }
-
-        const defaultCompetencyId = previous.questions[0]?.competency_id
-          || loadedCompetencies[0]?.id
-          || "";
-
-        return {
-          ...previous,
-          questions: [
-            createEmptyQuestion(defaultCompetencyId),
-          ],
-        };
-      });
-    } catch (loadError) {
-      setError(
-        loadError?.message || "Unable to load trainer assessments."
-      );
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
   useEffect(() => {
-    load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    Promise.all([
+      assessmentApi.listManageAssessments(),
+      assessmentApi.getAssignedReviews(),
+    ])
+      .then(([assessmentData, assignmentData]) => {
+        setAssessments(assessmentData || []);
+        setAssignments(assignmentData || []);
+
+        if (assessmentData?.length) {
+          setAssessmentId(
+            String(assessmentData[0].id)
+          );
+        }
+      })
+      .catch((loadError) => {
+        setError(
+          loadError?.message ||
+            "Unable to load assignments."
+        );
+      })
+      .finally(() => {
+        setLoading(false);
+      });
   }, []);
 
-  const changeAssessmentField = (event) => {
-    const { name, value } = event.target;
-
-    setForm((previous) => ({
-      ...previous,
-      [name]: value,
-    }));
-  };
-
-  const changeQuestionField = (questionIndex, event) => {
-    const { name, value } = event.target;
-
-    setForm((previous) => ({
-      ...previous,
-      questions: previous.questions.map((question, index) =>
-        index === questionIndex
-          ? {
-              ...question,
-              [name]: value,
-            }
-          : question
-      ),
-    }));
-  };
-
-  const addQuestion = () => {
-    const defaultCompetencyId = competencies[0]?.id || "";
-
-    setForm((previous) => ({
-      ...previous,
-      questions: [
-        ...previous.questions,
-        createEmptyQuestion(defaultCompetencyId),
-      ],
-    }));
-
-    setError("");
-    setSuccess("");
-  };
-
-  const removeQuestion = (questionIndex) => {
-    if (form.questions.length === 1) {
-      setError("An assessment must contain at least one question.");
-      return;
-    }
-
-    setForm((previous) => ({
-      ...previous,
-      questions: previous.questions.filter(
-        (_, index) => index !== questionIndex
-      ),
-    }));
-
-    setError("");
-    setSuccess("");
-  };
-
-  const validateQuestions = () => {
-    for (let index = 0; index < form.questions.length; index += 1) {
-      const question = form.questions[index];
-
-      const questionNumber = index + 1;
-
-      if (!question.competency_id) {
-        return `Select a competency for Question ${questionNumber}.`;
-      }
-
-      if (!question.question_text.trim()) {
-        return `Enter the question text for Question ${questionNumber}.`;
-      }
-
-      const options = question.options
-        .split(",")
-        .map((item) => item.trim())
-        .filter(Boolean);
-
-      if (options.length < 2) {
-        return `Question ${questionNumber} must have at least two options.`;
-      }
-
-      if (new Set(options).size !== options.length) {
-        return `Question ${questionNumber} contains duplicate options.`;
-      }
-
-      const correctAnswer = question.correct_answer.trim();
-
-      if (!correctAnswer) {
-        return `Enter the correct answer for Question ${questionNumber}.`;
-      }
-
-      if (!options.includes(correctAnswer)) {
-        return `The correct answer for Question ${questionNumber} must exactly match one of its options.`;
-      }
-    }
-
-    return "";
-  };
-
-  const create = async (event) => {
+  const assign = async (event) => {
     event.preventDefault();
 
     setError("");
     setSuccess("");
 
-    if (!form.title.trim()) {
-      setError("Enter an assessment title.");
+    if (!assessmentId || !learnerId) {
+      setError(
+        "Please select an assessment and enter a learner ID."
+      );
       return;
     }
-
-    const validationError = validateQuestions();
-
-    if (validationError) {
-      setError(validationError);
-      return;
-    }
-
-    const questions = form.questions.map((question) => ({
-      competency_id: Number(question.competency_id),
-      question_text: question.question_text.trim(),
-      options: question.options
-        .split(",")
-        .map((item) => item.trim())
-        .filter(Boolean),
-      correct_answer: question.correct_answer.trim(),
-      difficulty: question.difficulty,
-      explanation: question.explanation.trim() || null,
-    }));
-
-    setIsSaving(true);
 
     try {
-      await assessmentApi.createAssessment({
-        title: form.title.trim(),
-        description: form.description.trim() || null,
-        questions,
-      });
+      const created =
+        await assessmentApi.createAssignment({
+          assessment_id: Number(assessmentId),
+          learner_id: Number(learnerId),
+        });
 
-      const defaultCompetencyId = competencies[0]?.id || "";
+      setAssignments((previous) => [
+        created,
+        ...previous,
+      ]);
 
-      setForm(createEmptyForm(defaultCompetencyId));
+      setLearnerId("");
 
       setSuccess(
-        `Assessment created successfully with ${questions.length} question${
-          questions.length === 1 ? "" : "s"
-        }.`
+        "Assessment assigned to learner."
       );
-
-      await load();
-    } catch (saveError) {
+    } catch (assignError) {
       setError(
-        saveError?.message || "Unable to create assessment."
+        assignError?.message ||
+          "Unable to assign assessment."
+      );
+    }
+  };
+
+  const toggleAssignment = async (assignment) => {
+    setError("");
+
+    if (
+      expandedAssignmentId === assignment.id
+    ) {
+      setExpandedAssignmentId(null);
+      return;
+    }
+
+    setExpandedAssignmentId(assignment.id);
+
+    if (assignmentDetails[assignment.id]) {
+      return;
+    }
+
+    if (!assignment.attempt) {
+      return;
+    }
+
+    setDetailsLoading(true);
+
+    try {
+      /*
+       * Use the trainer's management endpoint because
+       * it includes the correct answer and complete
+       * authoring information.
+       *
+       * The learner's selected answer and correctness
+       * come from assignment.answers.
+       */
+      const assessment =
+        await assessmentApi.getManageAssessment(
+          assignment.assessment_id
+        );
+
+      setAssignmentDetails((previous) => ({
+        ...previous,
+        [assignment.id]: {
+          assessment,
+        },
+      }));
+    } catch (detailsError) {
+      setError(
+        detailsError?.message ||
+          "Unable to load assessment questions."
       );
     } finally {
-      setIsSaving(false);
+      setDetailsLoading(false);
     }
   };
 
-  const toggle = async (assessment) => {
-    setError("");
-    setSuccess("");
-
-    try {
-      const updated = await assessmentApi.updateAssessment(
-        assessment.id,
-        {
-          is_active: !assessment.is_active,
-        }
-      );
-
-      setAssessments((previous) =>
-        previous.map((item) =>
-          item.id === updated.id ? updated : item
-        )
-      );
-
-      setSuccess(
-        updated.is_active
-          ? "Assessment activated."
-          : "Assessment deactivated."
-      );
-    } catch (updateError) {
-      setError(
-        updateError?.message || "Unable to update assessment."
-      );
-    }
-  };
-
-  const remove = async (assessmentId) => {
-    if (
-      !window.confirm(
-        "Delete this assessment? Assessments with learner attempts cannot be deleted."
-      )
-    ) {
-      return;
-    }
-
-    setError("");
-    setSuccess("");
-
-    try {
-      await assessmentApi.deleteAssessment(assessmentId);
-
-      setAssessments((previous) =>
-        previous.filter((item) => item.id !== assessmentId)
-      );
-
-      setSuccess("Assessment deleted.");
-    } catch (deleteError) {
-      setError(
-        deleteError?.message || "Unable to delete assessment."
-      );
-    }
-  };
-
-  if (isLoading) {
+  if (loading) {
     return (
-      <LoadingSpinner message="Loading trainer assessments..." />
+      <LoadingSpinner
+        message="Loading trainer assignments..."
+      />
     );
   }
 
   return (
     <div>
-      <h1>Assessment Authoring</h1>
+      <h1>Assessment Assignments</h1>
 
       <p>
-        <Link to="/trainer">Trainer Dashboard</Link>
+        <Link to="/trainer">
+          Trainer Dashboard
+        </Link>
       </p>
 
-      {error ? <ErrorMessage message={error} /> : null}
-
-      {success ? (
-        <p style={styles.success}>{success}</p>
+      {error ? (
+        <ErrorMessage message={error} />
       ) : null}
 
-      <form onSubmit={create} style={styles.form}>
-        <h2>Create assessment</h2>
+      {success ? (
+        <p style={styles.success}>
+          {success}
+        </p>
+      ) : null}
+
+      <form
+        onSubmit={assign}
+        style={styles.form}
+      >
+        <h2>Assign an assessment</h2>
+
+        <select
+          value={assessmentId}
+          onChange={(event) =>
+            setAssessmentId(
+              event.target.value
+            )
+          }
+          required
+          style={styles.input}
+        >
+          {assessments.map((assessment) => (
+            <option
+              key={assessment.id}
+              value={assessment.id}
+            >
+              {assessment.title}
+            </option>
+          ))}
+        </select>
 
         <input
-          name="title"
-          placeholder="Assessment title"
-          value={form.title}
-          onChange={changeAssessmentField}
+          type="number"
+          min="1"
+          placeholder="Learner user ID"
+          value={learnerId}
+          onChange={(event) =>
+            setLearnerId(
+              event.target.value
+            )
+          }
           required
           style={styles.input}
         />
 
-        <textarea
-          name="description"
-          placeholder="Description"
-          value={form.description}
-          onChange={changeAssessmentField}
-          style={styles.input}
-        />
-
-        <div style={styles.questionsHeader}>
-          <h3 style={styles.questionsTitle}>
-            Questions ({form.questions.length})
-          </h3>
-
-          <button
-            type="button"
-            onClick={addQuestion}
-            style={styles.addQuestionButton}
-          >
-            + Add Question
-          </button>
-        </div>
-
-        {form.questions.map((question, questionIndex) => (
-          <div
-            key={`question-${questionIndex}`}
-            style={styles.questionForm}
-          >
-            <div style={styles.questionHeader}>
-              <h3 style={styles.questionTitle}>
-                Question {questionIndex + 1}
-              </h3>
-
-              {form.questions.length > 1 ? (
-                <button
-                  type="button"
-                  onClick={() => removeQuestion(questionIndex)}
-                  style={styles.removeQuestionButton}
-                >
-                  Remove
-                </button>
-              ) : null}
-            </div>
-
-            <select
-              name="competency_id"
-              value={question.competency_id}
-              onChange={(event) =>
-                changeQuestionField(questionIndex, event)
-              }
-              required
-              style={styles.input}
-            >
-              <option value="" disabled>
-                Select competency
-              </option>
-
-              {competencies.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.name}
-                </option>
-              ))}
-            </select>
-
-            <textarea
-              name="question_text"
-              placeholder="Question text"
-              value={question.question_text}
-              onChange={(event) =>
-                changeQuestionField(questionIndex, event)
-              }
-              required
-              style={styles.input}
-            />
-
-            <input
-              name="options"
-              placeholder="Options separated by commas"
-              value={question.options}
-              onChange={(event) =>
-                changeQuestionField(questionIndex, event)
-              }
-              required
-              style={styles.input}
-            />
-
-            <input
-              name="correct_answer"
-              placeholder="Correct answer"
-              value={question.correct_answer}
-              onChange={(event) =>
-                changeQuestionField(questionIndex, event)
-              }
-              required
-              style={styles.input}
-            />
-
-            <select
-              name="difficulty"
-              value={question.difficulty}
-              onChange={(event) =>
-                changeQuestionField(questionIndex, event)
-              }
-              style={styles.input}
-            >
-              <option value="easy">Easy</option>
-              <option value="medium">Medium</option>
-              <option value="hard">Hard</option>
-            </select>
-
-            <textarea
-              name="explanation"
-              placeholder="Optional explanation"
-              value={question.explanation}
-              onChange={(event) =>
-                changeQuestionField(questionIndex, event)
-              }
-              style={styles.input}
-            />
-          </div>
-        ))}
-
-        <button
-          type="button"
-          onClick={addQuestion}
-          style={styles.secondaryAddButton}
-        >
-          + Add Another Question
-        </button>
-
         <button
           type="submit"
-          disabled={isSaving}
           style={styles.button}
         >
-          {isSaving ? "Saving..." : "Create Assessment"}
+          Assign Assessment
         </button>
+
+        <p style={styles.note}>
+          A dedicated learner directory belongs
+          to the admin phase.
+        </p>
       </form>
 
-      <div style={styles.list}>
-        {assessments.map((assessment) => (
-          <article
-            key={assessment.id}
-            style={styles.card}
-          >
-            <h2>{assessment.title}</h2>
+      <section style={styles.section}>
+        <h2>My Assigned Assessments</h2>
 
-            <p>
-              {assessment.description || "No description"}
-            </p>
+        {assignments.length === 0 ? (
+          <div style={styles.empty}>
+            No assessment assignments found.
+          </div>
+        ) : (
+          <div style={styles.list}>
+            {assignments.map((assignment) => {
+              const attempt =
+                assignment.attempt;
 
-            <p>
-              {assessment.questions.length} question(s) •{" "}
-              {assessment.is_active ? "Active" : "Inactive"}
-            </p>
+              const details =
+                assignmentDetails[
+                  assignment.id
+                ];
 
-            <div style={styles.row}>
-              <button
-                type="button"
-                onClick={() => toggle(assessment)}
-                style={styles.secondary}
-              >
-                {assessment.is_active
-                  ? "Deactivate"
-                  : "Activate"}
-              </button>
+              const questions =
+                details?.assessment?.questions ||
+                [];
 
-              <button
-                type="button"
-                onClick={() => remove(assessment.id)}
-                style={styles.danger}
-              >
-                Delete
-              </button>
-            </div>
+              const answers =
+                assignment.answers || [];
 
-            {assessment.questions.map((question) => (
-              <div
-                key={question.id}
-                style={styles.question}
-              >
-                <strong>
-                  {question.question_text}
-                </strong>
+              const answerMap =
+                new Map(
+                  answers.map((answer) => [
+                    answer.question_id,
+                    answer,
+                  ])
+                );
 
-                <span>
-                  Correct answer: {question.correct_answer}
-                </span>
+              const isExpanded =
+                expandedAssignmentId ===
+                assignment.id;
 
-                <span>
-                  Options: {question.options.join(", ")}
-                </span>
+              return (
+                <article
+                  key={assignment.id}
+                  style={styles.card}
+                >
+                  <div style={styles.cardHeader}>
+                    <div>
+                      <h3
+                        style={
+                          styles.cardTitle
+                        }
+                      >
+                        {assignment.assessment
+                          ?.title ||
+                          "Assessment"}
+                      </h3>
 
-                {question.difficulty ? (
-                  <span>
-                    Difficulty: {question.difficulty}
-                  </span>
-                ) : null}
+                      <div
+                        style={
+                          styles.cardMeta
+                        }
+                      >
+                        Learner:{" "}
+                        <strong>
+                          {
+                            assignment.learner_email
+                          }
+                        </strong>
+                      </div>
 
-                {question.explanation ? (
-                  <span>
-                    Explanation: {question.explanation}
-                  </span>
-                ) : null}
-              </div>
-            ))}
-          </article>
-        ))}
-      </div>
+                      <div
+                        style={
+                          styles.cardMeta
+                        }
+                      >
+                        Status:{" "}
+                        <strong>
+                          {assignment.status}
+                        </strong>
+                      </div>
+                    </div>
+
+                    {attempt ? (
+                      <div
+                        style={
+                          styles.scoreBox
+                        }
+                      >
+                        <strong>
+                          {attempt.score}/
+                          {
+                            attempt.total_questions
+                          }
+                        </strong>
+
+                        <span>
+                          {
+                            attempt.percentage
+                          }
+                          %
+                        </span>
+                      </div>
+                    ) : null}
+                  </div>
+
+                  <div
+                    style={
+                      styles.assignmentInfo
+                    }
+                  >
+                    <span>
+                      Assigned:{" "}
+                      {formatDate(
+                        assignment.assigned_at
+                      )}
+                    </span>
+
+                    {assignment.completed_at ? (
+                      <span>
+                        Completed:{" "}
+                        {formatDate(
+                          assignment.completed_at
+                        )}
+                      </span>
+                    ) : null}
+
+                    {assignment.due_at ? (
+                      <span>
+                        Due:{" "}
+                        {formatDate(
+                          assignment.due_at
+                        )}
+                      </span>
+                    ) : null}
+                  </div>
+
+                  {attempt ? (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        toggleAssignment(
+                          assignment
+                        )
+                      }
+                      style={
+                        styles.secondaryButton
+                      }
+                    >
+                      {isExpanded
+                        ? "Hide Attempt"
+                        : "View Attempt"}
+                    </button>
+                  ) : (
+                    <p style={styles.pending}>
+                      Learner has not completed
+                      this assessment yet.
+                    </p>
+                  )}
+
+                  {isExpanded ? (
+                    <div
+                      style={
+                        styles.attemptPanel
+                      }
+                    >
+                      <div
+                        style={
+                          styles.resultSummary
+                        }
+                      >
+                        <div
+                          style={
+                            styles.summaryItem
+                          }
+                        >
+                          <span>
+                            Score
+                          </span>
+
+                          <strong>
+                            {attempt.score}/
+                            {
+                              attempt.total_questions
+                            }
+                          </strong>
+                        </div>
+
+                        <div
+                          style={
+                            styles.summaryItem
+                          }
+                        >
+                          <span>
+                            Percentage
+                          </span>
+
+                          <strong>
+                            {
+                              attempt.percentage
+                            }
+                            %
+                          </strong>
+                        </div>
+                      </div>
+
+                      {detailsLoading &&
+                      !details ? (
+                        <LoadingSpinner
+                          message="Loading questions..."
+                        />
+                      ) : null}
+
+                      {!detailsLoading &&
+                      questions.length === 0 ? (
+                        <p
+                          style={
+                            styles.note
+                          }
+                        >
+                          Assessment questions could
+                          not be loaded.
+                        </p>
+                      ) : null}
+
+                      {questions.map(
+                        (
+                          question,
+                          index
+                        ) => {
+                          const answer =
+                            answerMap.get(
+                              question.id
+                            );
+
+                          return (
+                            <div
+                              key={
+                                question.id
+                              }
+                              style={
+                                styles.questionCard
+                              }
+                            >
+                              <div
+                                style={
+                                  styles.questionHeader
+                                }
+                              >
+                                <strong>
+                                  Question{" "}
+                                  {index + 1}
+                                </strong>
+
+                                {answer ? (
+                                  <span
+                                    style={{
+                                      ...styles.resultBadge,
+                                      ...(answer.is_correct
+                                        ? styles.correct
+                                        : styles.incorrect),
+                                    }}
+                                  >
+                                    {answer.is_correct
+                                      ? "Correct"
+                                      : "Incorrect"}
+                                  </span>
+                                ) : (
+                                  <span
+                                    style={
+                                      styles.unanswered
+                                    }
+                                  >
+                                    Not answered
+                                  </span>
+                                )}
+                              </div>
+
+                              <p
+                                style={
+                                  styles.questionText
+                                }
+                              >
+                                {
+                                  question.question_text
+                                }
+                              </p>
+
+                              <div
+                                style={
+                                  styles.answerBlock
+                                }
+                              >
+                                <span
+                                  style={
+                                    styles.answerLabel
+                                  }
+                                >
+                                  Learner's Answer
+                                </span>
+
+                                <strong>
+                                  {answer
+                                    ?.selected_answer ||
+                                    "Not answered"}
+                                </strong>
+                              </div>
+
+                              <div
+                                style={
+                                  styles.answerBlock
+                                }
+                              >
+                                <span
+                                  style={
+                                    styles.answerLabel
+                                  }
+                                >
+                                  Correct Answer
+                                </span>
+
+                                <strong>
+                                  {
+                                    question.correct_answer
+                                  }
+                                </strong>
+                              </div>
+
+                              {question.explanation ? (
+                                <div
+                                  style={
+                                    styles.explanation
+                                  }
+                                >
+                                  <strong>
+                                    Explanation:
+                                  </strong>
+
+                                  <span>
+                                    {
+                                      question.explanation
+                                    }
+                                  </span>
+                                </div>
+                              ) : null}
+                            </div>
+                          );
+                        }
+                      )}
+                    </div>
+                  ) : null}
+                </article>
+              );
+            })}
+          </div>
+        )}
+      </section>
     </div>
   );
+}
+
+function formatDate(value) {
+  if (!value) {
+    return "—";
+  }
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  return date.toLocaleString();
 }
 
 const styles = {
@@ -552,70 +609,6 @@ const styles = {
     borderRadius: "8px",
     padding: "0.7rem",
     font: "inherit",
-    width: "100%",
-    boxSizing: "border-box",
-  },
-
-  questionsHeader: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: "1rem",
-    marginTop: "0.5rem",
-  },
-
-  questionsTitle: {
-    margin: 0,
-  },
-
-  questionForm: {
-    display: "grid",
-    gap: "0.75rem",
-    border: "1px solid #cbd5e1",
-    borderRadius: "10px",
-    padding: "1rem",
-    background: "#f8fafc",
-  },
-
-  questionHeader: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: "1rem",
-  },
-
-  questionTitle: {
-    margin: 0,
-  },
-
-  addQuestionButton: {
-    border: "none",
-    borderRadius: "8px",
-    background: "#0f766e",
-    color: "#fff",
-    padding: "0.65rem 0.9rem",
-    fontWeight: 700,
-    cursor: "pointer",
-  },
-
-  secondaryAddButton: {
-    border: "1px solid #2563eb",
-    borderRadius: "8px",
-    background: "#fff",
-    color: "#2563eb",
-    padding: "0.7rem 0.9rem",
-    fontWeight: 700,
-    cursor: "pointer",
-  },
-
-  removeQuestionButton: {
-    border: "none",
-    borderRadius: "8px",
-    background: "#dc2626",
-    color: "#fff",
-    padding: "0.55rem 0.8rem",
-    fontWeight: 700,
-    cursor: "pointer",
   },
 
   button: {
@@ -628,24 +621,37 @@ const styles = {
     cursor: "pointer",
   },
 
-  secondary: {
-    border: "1px solid #94a3b8",
+  secondaryButton: {
+    border: "1px solid #2563eb",
     borderRadius: "8px",
     background: "#fff",
-    padding: "0.65rem 0.85rem",
+    color: "#2563eb",
+    padding: "0.65rem 0.9rem",
     fontWeight: 700,
     cursor: "pointer",
+    marginTop: "0.9rem",
   },
 
-  danger: {
-    border: "none",
-    borderRadius: "8px",
-    background: "#dc2626",
-    color: "#fff",
-    padding: "0.65rem 0.85rem",
-    fontWeight: 700,
-    cursor: "pointer",
-    marginLeft: "0.5rem",
+  note: {
+    color: "#475569",
+    margin: 0,
+  },
+
+  success: {
+    color: "#166534",
+    fontWeight: 600,
+  },
+
+  section: {
+    marginTop: "1.5rem",
+  },
+
+  empty: {
+    background: "#fff",
+    border: "1px solid #e2e8f0",
+    borderRadius: "10px",
+    padding: "1.25rem",
+    color: "#64748b",
   },
 
   list: {
@@ -657,26 +663,136 @@ const styles = {
     background: "#fff",
     border: "1px solid #e2e8f0",
     borderRadius: "10px",
-    padding: "1.25rem",
+    padding: "1.1rem",
   },
 
-  row: {
+  cardHeader: {
     display: "flex",
-    gap: "0.75rem",
-    flexWrap: "wrap",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    gap: "1rem",
   },
 
-  question: {
+  cardTitle: {
+    margin: 0,
+    marginBottom: "0.5rem",
+  },
+
+  cardMeta: {
+    color: "#475569",
+    marginTop: "0.25rem",
+  },
+
+  scoreBox: {
+    display: "grid",
+    gap: "0.15rem",
+    textAlign: "right",
+    padding: "0.65rem 0.85rem",
+    borderRadius: "8px",
+    background: "#eff6ff",
+    color: "#1d4ed8",
+  },
+
+  assignmentInfo: {
+    display: "flex",
+    flexWrap: "wrap",
+    gap: "1rem",
+    marginTop: "0.9rem",
+    color: "#64748b",
+    fontSize: "0.9rem",
+  },
+
+  pending: {
+    color: "#92400e",
+    background: "#fffbeb",
+    borderRadius: "8px",
+    padding: "0.7rem",
+    marginTop: "0.9rem",
+  },
+
+  attemptPanel: {
+    marginTop: "1.25rem",
+    borderTop: "1px solid #e2e8f0",
+    paddingTop: "1.25rem",
+  },
+
+  resultSummary: {
+    display: "flex",
+    gap: "1rem",
+    flexWrap: "wrap",
+    marginBottom: "1rem",
+  },
+
+  summaryItem: {
     display: "grid",
     gap: "0.25rem",
-    marginTop: "1rem",
-    borderTop: "1px solid #e2e8f0",
-    paddingTop: "0.75rem",
-    color: "#475569",
+    minWidth: "120px",
+    border: "1px solid #e2e8f0",
+    borderRadius: "8px",
+    padding: "0.75rem",
   },
 
-  success: {
-    color: "#166534",
+  questionCard: {
+    border: "1px solid #e2e8f0",
+    borderRadius: "10px",
+    padding: "1rem",
+    marginTop: "0.75rem",
+  },
+
+  questionHeader: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: "1rem",
+  },
+
+  questionText: {
     fontWeight: 600,
+    lineHeight: 1.5,
+  },
+
+  resultBadge: {
+    padding: "0.3rem 0.6rem",
+    borderRadius: "999px",
+    fontSize: "0.8rem",
+    fontWeight: 700,
+  },
+
+  correct: {
+    background: "#dcfce7",
+    color: "#166534",
+  },
+
+  incorrect: {
+    background: "#fee2e2",
+    color: "#991b1b",
+  },
+
+  unanswered: {
+    color: "#64748b",
+    fontSize: "0.85rem",
+  },
+
+  answerBlock: {
+    display: "grid",
+    gap: "0.35rem",
+    background: "#f8fafc",
+    borderRadius: "8px",
+    padding: "0.85rem",
+    marginTop: "0.75rem",
+  },
+
+  answerLabel: {
+    color: "#64748b",
+    fontSize: "0.8rem",
+    fontWeight: 700,
+    textTransform: "uppercase",
+  },
+
+  explanation: {
+    display: "grid",
+    gap: "0.3rem",
+    marginTop: "0.75rem",
+    color: "#475569",
   },
 };

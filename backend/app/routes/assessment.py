@@ -83,17 +83,29 @@ def list_assessments(
 def assign_assessment(
     assignment_data: AssessmentAssignmentCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role(*CONTENT_MANAGER_ROLES)),
+    current_user: User = Depends(
+        require_role(*CONTENT_MANAGER_ROLES)
+    ),
 ):
     try:
-        assignment = create_assignment(db, current_user.id, assignment_data)
-        return get_assignment_response(db, assignment)
+        assignment = create_assignment(
+            db,
+            current_user.id,
+            assignment_data,
+        )
+
+        return get_assignment_response(
+            db,
+            assignment,
+        )
+
     except ValueError as exc:
         code = (
             status.HTTP_409_CONFLICT
             if "already assigned" in str(exc).lower()
             else status.HTTP_404_NOT_FOUND
         )
+
         raise HTTPException(
             status_code=code,
             detail=str(exc),
@@ -108,7 +120,10 @@ def list_my_assignments(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    return get_learner_assignments(db, current_user.id)
+    return get_learner_assignments(
+        db,
+        current_user.id,
+    )
 
 
 @router.get(
@@ -121,7 +136,21 @@ def list_assigned_reviews(
         require_role("tester", *CONTENT_MANAGER_ROLES)
     ),
 ):
-    return get_review_assignments(db)
+    assignments = get_review_assignments(db)
+
+    # Trainers should only see assessments that
+    # they personally assigned to learners.
+    #
+    # Testers and admins retain the broader review
+    # visibility provided by get_review_assignments().
+    if current_user.role == "trainer":
+        assignments = [
+            assignment
+            for assignment in assignments
+            if assignment["assigned_by"] == current_user.id
+        ]
+
+    return assignments
 
 
 @router.get(
@@ -157,7 +186,9 @@ def review_assigned_assessment(
     assignment_id: int,
     feedback_data: AssessmentAssignmentFeedback,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role("tester")),
+    current_user: User = Depends(
+        require_role("tester")
+    ),
 ):
     try:
         return review_assignment(
@@ -165,6 +196,7 @@ def review_assigned_assessment(
             assignment_id,
             feedback_data,
         )
+
     except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -193,6 +225,7 @@ def create_new_assessment(
             db,
             assessment_data,
         )
+
     except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -289,6 +322,7 @@ def edit_assessment(
                 assessment_data,
             )
         )
+
     except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -312,6 +346,7 @@ def remove_assessment(
             db,
             assessment_id,
         )
+
     except ValueError as exc:
         code = (
             status.HTTP_409_CONFLICT
@@ -346,6 +381,7 @@ def add_question(
             assessment_id,
             question_data,
         )
+
     except ValueError as exc:
         code = (
             status.HTTP_400_BAD_REQUEST
@@ -380,6 +416,7 @@ def edit_question(
             question_id,
             question_data,
         )
+
     except ValueError as exc:
         code = (
             status.HTTP_400_BAD_REQUEST
@@ -412,6 +449,7 @@ def remove_question(
             db,
             question_id,
         )
+
     except ValueError as exc:
         code = (
             status.HTTP_409_CONFLICT
