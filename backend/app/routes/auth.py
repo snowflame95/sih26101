@@ -1,10 +1,16 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    HTTPException,
+    status,
+)
 from sqlalchemy.orm import Session
 
 from app.core.security import (
     create_access_token,
     get_current_user,
     require_role,
+    verify_special_registration_key,
 )
 from app.db.database import get_db
 from app.db.models.user import User
@@ -66,7 +72,7 @@ def register(
 
 
 # ============================================================
-# PROTECTED TRAINER / ADMIN PROVISIONING
+# SPECIAL TRAINER / ADMIN REGISTRATION
 # ============================================================
 
 @router.post(
@@ -77,18 +83,20 @@ def register(
 def create_privileged_account(
     user_data: AdminUserCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(
-        require_role("admin")
+    _registration_key: str = Depends(
+        verify_special_registration_key
     ),
 ):
     """
-    Admin-only account provisioning.
+    Special privileged registration.
+
+    Requires the special registration key.
 
     Allowed roles:
     - trainer
     - admin
 
-    Learner accounts must use the public registration endpoint.
+    Learner accounts must use /register.
     """
 
     try:
@@ -118,6 +126,12 @@ def login(
     user_data: UserLogin,
     db: Session = Depends(get_db),
 ):
+    """
+    Login works for all active user roles.
+
+    The actual role is stored in the database.
+    """
+
     user = authenticate_user(
         db,
         user_data.email,
@@ -152,6 +166,11 @@ def get_me(
         get_current_user
     ),
 ):
+    """
+    Returns the actual authenticated user
+    including the database role.
+    """
+
     return current_user
 
 

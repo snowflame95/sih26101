@@ -6,12 +6,14 @@ const authApi = {
     return apiClient.get("/health");
   },
 
+
   login(credentials) {
     return apiClient.post(
       "/api/auth/login",
       credentials
     );
   },
+
 
   register(userData) {
     return apiClient.post(
@@ -20,9 +22,13 @@ const authApi = {
     );
   },
 
+
   getCurrentUser() {
     return apiClient.get(
-      "/api/auth/me"
+      "/api/auth/me",
+      {
+        auth: true,
+      }
     );
   },
 };
