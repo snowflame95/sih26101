@@ -9,6 +9,7 @@ from app.core.security import (
 from app.db.database import get_db
 from app.db.models.user import User
 from app.schemas.user import (
+    AdminUserCreate,
     TokenResponse,
     UserCreate,
     UserLogin,
@@ -17,6 +18,7 @@ from app.schemas.user import (
 )
 from app.services.auth_service import (
     authenticate_user,
+    create_privileged_user,
     create_user,
     update_user_role,
 )
@@ -28,6 +30,10 @@ router = APIRouter(
 )
 
 
+# ============================================================
+# PUBLIC LEARNER REGISTRATION
+# ============================================================
+
 @router.post(
     "/register",
     response_model=UserResponse,
@@ -37,8 +43,19 @@ def register(
     user_data: UserCreate,
     db: Session = Depends(get_db),
 ):
+    """
+    Public registration.
+
+    This endpoint ALWAYS creates a learner.
+    Role cannot be selected here.
+    """
+
     try:
-        user = create_user(db, user_data)
+        user = create_user(
+            db,
+            user_data,
+        )
+
         return user
 
     except ValueError as exc:
@@ -47,6 +64,51 @@ def register(
             detail=str(exc),
         ) from exc
 
+
+# ============================================================
+# PROTECTED TRAINER / ADMIN PROVISIONING
+# ============================================================
+
+@router.post(
+    "/users",
+    response_model=UserResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_privileged_account(
+    user_data: AdminUserCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(
+        require_role("admin")
+    ),
+):
+    """
+    Admin-only account provisioning.
+
+    Allowed roles:
+    - trainer
+    - admin
+
+    Learner accounts must use the public registration endpoint.
+    """
+
+    try:
+        user = create_privileged_user(
+            db,
+            user_data,
+        )
+
+        return user
+
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+
+
+# ============================================================
+# LOGIN
+# ============================================================
 
 @router.post(
     "/login",
@@ -68,22 +130,34 @@ def login(
             detail="Invalid email or password",
         )
 
-    access_token = create_access_token(str(user.id))
+    access_token = create_access_token(
+        str(user.id)
+    )
 
     return TokenResponse(
         access_token=access_token,
     )
 
 
+# ============================================================
+# CURRENT USER
+# ============================================================
+
 @router.get(
     "/me",
     response_model=UserResponse,
 )
 def get_me(
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(
+        get_current_user
+    ),
 ):
     return current_user
 
+
+# ============================================================
+# ADMIN ROLE MANAGEMENT
+# ============================================================
 
 @router.patch(
     "/users/{user_id}/role",
@@ -103,6 +177,7 @@ def update_role(
             user_id,
             role_data.role,
         )
+
         return user
 
     except ValueError as exc:

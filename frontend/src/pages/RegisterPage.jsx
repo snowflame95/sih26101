@@ -3,93 +3,164 @@ import { Link, useNavigate } from "react-router-dom";
 
 import { useAuth } from "../context/AuthContext";
 
+
 export default function RegisterPage() {
   const navigate = useNavigate();
+
   const { register } = useAuth();
-  const [formData, setFormData] = useState({
+
+  const [form, setForm] = useState({
     email: "",
     password: "",
   });
+
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+
   const handleChange = (event) => {
-    const { name, value } = event.target;
-    setFormData((previous) => ({ ...previous, [name]: value }));
+    const {
+      name,
+      value,
+    } = event.target;
+
+    setForm((previous) => ({
+      ...previous,
+      [name]: value,
+    }));
   };
+
 
   const handleSubmit = async (event) => {
     event.preventDefault();
+
     setError("");
     setSuccess("");
     setIsSubmitting(true);
 
     try {
-      await register(formData);
-      setSuccess("Registration successful. Redirecting to login...");
+      await register({
+        email: form.email,
+        password: form.password,
+      });
+
+      setSuccess(
+        "Learner account created successfully. Redirecting to login..."
+      );
 
       setTimeout(() => {
-        navigate("/login", { replace: true });
-      }, 900);
-    } catch (submitError) {
-      setError(submitError?.message || "Unable to create account right now.");
+        navigate("/login");
+      }, 800);
+
+    } catch (err) {
+      setError(
+        err?.message ||
+        "Registration failed"
+      );
+
     } finally {
       setIsSubmitting(false);
     }
   };
 
+
   return (
     <div style={styles.page}>
       <div style={styles.card}>
-        <h1>Create account</h1>
-        <p style={styles.subtitle}>Start your skill learning journey</p>
 
-        <form onSubmit={handleSubmit} style={styles.form}>
+        <h1 style={styles.title}>
+          Create Account
+        </h1>
+
+        <p style={styles.subtitle}>
+          Register as a learner
+        </p>
+
+
+        {error && (
+          <div style={styles.error}>
+            {error}
+          </div>
+        )}
+
+
+        {success && (
+          <div style={styles.success}>
+            {success}
+          </div>
+        )}
+
+
+        <form onSubmit={handleSubmit}>
+
           <label style={styles.label}>
             Email
-            <input
-              type="email"
-              name="email"
-              value={formData.email}
-              onChange={handleChange}
-              required
-              style={styles.input}
-              placeholder="user@example.com"
-            />
           </label>
+
+          <input
+            type="email"
+            name="email"
+            value={form.email}
+            onChange={handleChange}
+            required
+            style={styles.input}
+            placeholder="you@example.com"
+          />
+
 
           <label style={styles.label}>
             Password
-            <input
-              type="password"
-              name="password"
-              value={formData.password}
-              onChange={handleChange}
-              minLength={8}
-              required
-              style={styles.input}
-              placeholder="At least 8 characters"
-            />
           </label>
 
-          <p style={styles.roleNote}>New accounts are created as Learner accounts.</p>
+          <input
+            type="password"
+            name="password"
+            value={form.password}
+            onChange={handleChange}
+            required
+            minLength={8}
+            style={styles.input}
+            placeholder="Minimum 8 characters"
+          />
 
-          {error ? <p style={styles.error}>{error}</p> : null}
-          {success ? <p style={styles.success}>{success}</p> : null}
 
-          <button type="submit" disabled={isSubmitting} style={styles.button}>
-            {isSubmitting ? "Creating account..." : "Register"}
+          <div style={styles.info}>
+            New accounts created here are
+            <strong> Learner </strong>
+            accounts.
+          </div>
+
+
+          <button
+            type="submit"
+            disabled={isSubmitting}
+            style={styles.button}
+          >
+            {isSubmitting
+              ? "Creating..."
+              : "Create Learner Account"}
           </button>
+
         </form>
 
-        <p style={styles.footerText}>
-          Already have an account? <Link to="/login">Login</Link>
+
+        <p style={styles.footer}>
+          Already have an account?{" "}
+
+          <Link
+            to="/login"
+            style={styles.link}
+          >
+            Login
+          </Link>
         </p>
+
       </div>
     </div>
   );
 }
+
 
 const styles = {
   page: {
@@ -97,68 +168,91 @@ const styles = {
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    background: "#f3f4f6",
+    background: "#f8fafc",
     padding: "1rem",
   },
+
   card: {
     width: "100%",
     maxWidth: "420px",
     background: "#ffffff",
-    borderRadius: "12px",
-    boxShadow: "0 8px 24px rgba(15, 23, 42, 0.08)",
     padding: "2rem",
+    borderRadius: "12px",
+    boxShadow:
+      "0 10px 30px rgba(15, 23, 42, 0.08)",
+    boxSizing: "border-box",
   },
+
+  title: {
+    marginBottom: "0.4rem",
+  },
+
   subtitle: {
-    marginTop: "0.5rem",
+    color: "#64748b",
+    marginTop: 0,
     marginBottom: "1.5rem",
-    color: "#475569",
   },
-  roleNote: {
-    margin: 0,
-    color: "#475569",
-    fontSize: "0.95rem",
-  },
-  form: {
-    display: "flex",
-    flexDirection: "column",
-    gap: "1rem",
-  },
+
   label: {
-    display: "flex",
-    flexDirection: "column",
-    gap: "0.5rem",
+    display: "block",
+    marginBottom: "0.4rem",
     fontWeight: 600,
-    color: "#1f2937",
   },
+
   input: {
-    border: "1px solid #d1d5db",
+    width: "100%",
+    padding: "0.75rem",
+    marginBottom: "1rem",
+    border:
+      "1px solid #cbd5e1",
     borderRadius: "8px",
-    padding: "0.75rem 0.875rem",
-    fontSize: "1rem",
+    boxSizing: "border-box",
   },
-  button: {
-    border: "none",
+
+  info: {
+    background: "#f1f5f9",
+    padding: "0.8rem",
     borderRadius: "8px",
-    background: "#0f766e",
+    marginBottom: "1rem",
+    fontSize: "0.9rem",
+    color: "#475569",
+  },
+
+  button: {
+    width: "100%",
+    border: "none",
+    background: "#0f172a",
     color: "#ffffff",
-    padding: "0.85rem 1rem",
-    fontSize: "1rem",
+    padding: "0.8rem",
+    borderRadius: "8px",
     fontWeight: 700,
     cursor: "pointer",
   },
+
   error: {
-    margin: 0,
-    color: "#b91c1c",
-    fontSize: "0.95rem",
+    background: "#fee2e2",
+    color: "#991b1b",
+    padding: "0.75rem",
+    borderRadius: "8px",
+    marginBottom: "1rem",
   },
+
   success: {
-    margin: 0,
+    background: "#dcfce7",
     color: "#166534",
-    fontSize: "0.95rem",
+    padding: "0.75rem",
+    borderRadius: "8px",
+    marginBottom: "1rem",
   },
-  footerText: {
-    marginTop: "1.25rem",
+
+  footer: {
+    marginTop: "1.5rem",
     textAlign: "center",
-    color: "#475569",
+    color: "#64748b",
+  },
+
+  link: {
+    fontWeight: 700,
+    color: "#0f172a",
   },
 };

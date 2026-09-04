@@ -53,7 +53,8 @@ export default function DashboardPage() {
   const { user, logout } = useAuth();
   const [summary, setSummary] = useState(null);
   const [error, setError] = useState("");
-  const normalizedRole = (user?.role || "learner").toLowerCase();
+  const normalizedRole =
+  user?.role?.toLowerCase() || "";
   const roleInfo = ROLE_DETAILS[normalizedRole] || ROLE_DETAILS.learner;
 
   useEffect(() => {

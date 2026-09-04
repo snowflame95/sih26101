@@ -2,71 +2,123 @@ import { NavLink, Outlet } from "react-router-dom";
 
 import { useAuth } from "../context/AuthContext";
 
+
 const NAV_ITEMS = [
+
+  // ==========================================================
+  // COMMON
+  // ==========================================================
+
   {
     label: "Dashboard",
     to: "/dashboard",
   },
+
   {
     label: "My Profile",
     to: "/profile",
   },
+
+
+  // ==========================================================
+  // LEARNER
+  // ==========================================================
+
   {
     label: "My Competencies",
     to: "/competencies",
     roles: ["learner"],
   },
+
   {
     label: "Assessment",
     to: "/assessment",
     roles: ["learner"],
   },
+
   {
     label: "Assessment History",
     to: "/assessment-history",
     roles: ["learner"],
   },
+
   {
     label: "Assigned Assessments",
     to: "/assigned-assessments",
     roles: ["learner"],
   },
+
   {
     label: "Learning",
     to: "/learning",
     roles: ["learner"],
   },
+
   {
     label: "Roadmap",
     to: "/roadmap",
     roles: ["learner"],
   },
+
+
+  // ==========================================================
+  // TRAINER
+  // ==========================================================
+
   {
     label: "Trainer Dashboard",
     to: "/trainer",
-    roles: ["trainer", "admin"],
+    roles: ["trainer"],
   },
+
   {
     label: "Learning Content",
     to: "/trainer/modules",
-    roles: ["trainer", "admin"],
+    roles: ["trainer"],
   },
+
   {
     label: "Assessment Authoring",
     to: "/trainer/assessments",
-    roles: ["trainer", "admin"],
+    roles: ["trainer"],
   },
+
   {
     label: "Assign Assessments",
     to: "/trainer/assignments",
-    roles: ["trainer", "admin"],
+    roles: ["trainer"],
   },
+
+
+  // ==========================================================
+  // TESTER
+  // ==========================================================
+
   {
     label: "Tester Assignments",
     to: "/tester",
     roles: ["tester"],
   },
+
+
+  // ==========================================================
+  // ADMIN
+  // ==========================================================
+
+  {
+    label: "Admin Dashboard",
+    to: "/admin",
+    roles: ["admin"],
+  },
+
+  {
+    label: "User Management",
+    to: "/admin/users",
+    roles: ["admin"],
+  },
+
 ];
+
 
 const ROLE_LABELS = {
   learner: "Learner Workspace",
@@ -75,25 +127,44 @@ const ROLE_LABELS = {
   admin: "Admin Workspace",
 };
 
-export default function AppLayout() {
-  const { user, logout } = useAuth();
 
-  const normalizedRole = (user?.role || "learner").toLowerCase();
+export default function AppLayout() {
+
+  const {
+    user,
+    logout,
+  } = useAuth();
+
+
+  const normalizedRole =
+    user?.role?.toLowerCase();
+
 
   const roleLabel =
-    ROLE_LABELS[normalizedRole] || ROLE_LABELS.learner;
+    ROLE_LABELS[normalizedRole] ||
+    "Workspace";
 
-  const visibleNavItems = NAV_ITEMS.filter(
-    (item) =>
-      !item.roles ||
-      item.roles.includes(normalizedRole)
-  );
+
+  const visibleNavItems =
+    NAV_ITEMS.filter(
+      (item) =>
+        !item.roles ||
+        item.roles.includes(
+          normalizedRole
+        )
+    );
+
 
   return (
     <div style={styles.shell}>
+
       <aside style={styles.sidebar}>
+
         <div style={styles.brandBlock}>
-          <h2 style={styles.brand}>SIH26101</h2>
+
+          <h2 style={styles.brand}>
+            SIH26101
+          </h2>
 
           <small style={styles.muted}>
             Skill Intelligence
@@ -102,29 +173,40 @@ export default function AppLayout() {
           <div style={styles.rolePill}>
             {roleLabel}
           </div>
+
         </div>
 
+
         <nav style={styles.nav}>
-          {visibleNavItems.map((item) => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              style={({ isActive }) => ({
-                ...styles.navLink,
-                ...(isActive
-                  ? styles.navLinkActive
-                  : {}),
-              })}
-            >
-              {item.label}
-            </NavLink>
-          ))}
+
+          {visibleNavItems.map(
+            (item) => (
+              <NavLink
+                key={item.to}
+                to={item.to}
+                style={({ isActive }) => ({
+                  ...styles.navLink,
+                  ...(isActive
+                    ? styles.navLinkActive
+                    : {}),
+                })}
+              >
+                {item.label}
+              </NavLink>
+            )
+          )}
+
         </nav>
+
       </aside>
 
+
       <main style={styles.main}>
+
         <header style={styles.header}>
+
           <div>
+
             <div style={styles.headerLabel}>
               Welcome back
             </div>
@@ -132,7 +214,9 @@ export default function AppLayout() {
             <strong>
               {user?.email || "User"}
             </strong>
+
           </div>
+
 
           <button
             onClick={logout}
@@ -140,15 +224,20 @@ export default function AppLayout() {
           >
             Logout
           </button>
+
         </header>
+
 
         <div style={styles.content}>
           <Outlet />
         </div>
+
       </main>
+
     </div>
   );
 }
+
 
 const styles = {
   shell: {
@@ -224,7 +313,8 @@ const styles = {
     justifyContent: "space-between",
     alignItems: "center",
     background: "#ffffff",
-    borderBottom: "1px solid #e2e8f0",
+    borderBottom:
+      "1px solid #e2e8f0",
     padding: "1rem 1.5rem",
   },
 
