@@ -1,25 +1,95 @@
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 
+import adminApi from "../api/adminApi";
 import { useAuth } from "../context/AuthContext";
 
 
 export default function AdminDashboardPage() {
   const { user } = useAuth();
 
+  const [overview, setOverview] = useState(null);
+  const [recentUsers, setRecentUsers] = useState([]);
+  const [recentAssessments, setRecentAssessments] = useState([]);
+
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState("");
+
+
+  const loadDashboard = async () => {
+    setIsLoading(true);
+    setError("");
+
+    try {
+      const [
+        overviewData,
+        usersData,
+        assessmentsData,
+      ] = await Promise.all([
+        adminApi.getOverview(),
+        adminApi.getRecentUsers(8),
+        adminApi.getAssessments(),
+      ]);
+
+      setOverview(overviewData);
+      setRecentUsers(usersData);
+      setRecentAssessments(
+        assessmentsData.slice(0, 8)
+      );
+    } catch (err) {
+      setError(
+        err?.message ||
+          "Unable to load admin dashboard."
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+
+  useEffect(() => {
+    loadDashboard();
+  }, []);
+
+
+  if (isLoading) {
+    return (
+      <div>
+        <h1>Admin Dashboard</h1>
+        <p>Loading administrative data...</p>
+      </div>
+    );
+  }
+
+
   return (
     <div>
+      <div style={styles.header}>
+        <div>
+          <h1>Admin Dashboard</h1>
 
-      <h1>
-        Admin Dashboard
-      </h1>
+          <p style={styles.subtitle}>
+            Platform administration and system intelligence.
+          </p>
+        </div>
 
-      <p style={styles.subtitle}>
-        System administration and user management workspace.
-      </p>
+        <Link
+          to="/admin/users"
+          style={styles.primaryButton}
+        >
+          User Management
+        </Link>
+      </div>
 
 
-      <div style={styles.card}>
+      {error && (
+        <div style={styles.error}>
+          {error}
+        </div>
+      )}
 
+
+      <div style={styles.welcomeCard}>
         <h2>
           Welcome, Administrator
         </h2>
@@ -34,61 +104,230 @@ export default function AdminDashboardPage() {
             {user?.role}
           </strong>
         </p>
-
       </div>
 
 
-      <div style={styles.grid}>
+      {overview && (
+        <>
+          <h2 style={styles.sectionTitle}>
+            Platform Overview
+          </h2>
 
-        <Link
-          to="/admin/users"
-          style={styles.link}
-        >
-          <div style={styles.card}>
+          <div style={styles.statsGrid}>
+            <StatCard
+              title="Total Users"
+              value={overview.users.total}
+            />
 
-            <h3>
-              User Management
-            </h3>
+            <StatCard
+              title="Learners"
+              value={overview.users.learners}
+            />
 
-            <p>
-              Manage learner, trainer and admin
-              accounts.
-            </p>
+            <StatCard
+              title="Trainers"
+              value={overview.users.trainers}
+            />
 
+            <StatCard
+              title="Admins"
+              value={overview.users.admins}
+            />
+
+            <StatCard
+              title="Active Users"
+              value={overview.users.active}
+            />
+
+            <StatCard
+              title="Assessments"
+              value={overview.assessments.total}
+            />
+
+            <StatCard
+              title="Assessment Attempts"
+              value={overview.assessments.attempts}
+            />
+
+            <StatCard
+              title="Average Score"
+              value={`${overview.assessments.average_score}%`}
+            />
+
+            <StatCard
+              title="Assignments"
+              value={overview.assignments.total}
+            />
+
+            <StatCard
+              title="Completed Assignments"
+              value={overview.assignments.completed}
+            />
           </div>
-        </Link>
+        </>
+      )}
 
 
-        <div style={styles.card}>
+      <div style={styles.twoColumn}>
+        <section style={styles.card}>
+          <div style={styles.cardHeader}>
+            <h2>Recent Users</h2>
 
-          <h3>
-            Platform Administration
-          </h3>
+            <Link to="/admin/users">
+              View all
+            </Link>
+          </div>
 
-          <p>
-            Administrative intelligence and
-            system controls will be available
-            here.
-          </p>
+          {recentUsers.length === 0 ? (
+            <p>No users found.</p>
+          ) : (
+            <div style={styles.list}>
+              {recentUsers.map((item) => (
+                <div
+                  key={item.id}
+                  style={styles.listItem}
+                >
+                  <div>
+                    <strong>
+                      {item.email}
+                    </strong>
 
-        </div>
+                    <div style={styles.muted}>
+                      User ID: {item.id}
+                    </div>
+                  </div>
 
+                  <div style={styles.badge}>
+                    {item.role}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+
+
+        <section style={styles.card}>
+          <div style={styles.cardHeader}>
+            <h2>Assessments</h2>
+          </div>
+
+          {recentAssessments.length === 0 ? (
+            <p>No assessments found.</p>
+          ) : (
+            <div style={styles.list}>
+              {recentAssessments.map(
+                (assessment) => (
+                  <div
+                    key={assessment.id}
+                    style={styles.listItem}
+                  >
+                    <div>
+                      <strong>
+                        {assessment.title}
+                      </strong>
+
+                      <div style={styles.muted}>
+                        {assessment.question_count} questions
+                        {" · "}
+                        {assessment.attempt_count} attempts
+                      </div>
+                    </div>
+
+                    <div style={styles.score}>
+                      {assessment.average_score}%
+                    </div>
+                  </div>
+                )
+              )}
+            </div>
+          )}
+        </section>
+      </div>
+    </div>
+  );
+}
+
+
+function StatCard({ title, value }) {
+  return (
+    <div style={styles.statCard}>
+      <div style={styles.statTitle}>
+        {title}
       </div>
 
+      <div style={styles.statValue}>
+        {value}
+      </div>
     </div>
   );
 }
 
 
 const styles = {
+  header: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: "1rem",
+    flexWrap: "wrap",
+  },
+
   subtitle: {
     color: "#64748b",
   },
 
-  grid: {
+  primaryButton: {
+    textDecoration: "none",
+    background: "#0f172a",
+    color: "#ffffff",
+    padding: "0.75rem 1rem",
+    borderRadius: "8px",
+    fontWeight: 700,
+  },
+
+  welcomeCard: {
+    background: "#ffffff",
+    padding: "1.25rem",
+    borderRadius: "10px",
+    border: "1px solid #e2e8f0",
+    marginTop: "1rem",
+  },
+
+  sectionTitle: {
+    marginTop: "1.5rem",
+  },
+
+  statsGrid: {
     display: "grid",
     gridTemplateColumns:
-      "repeat(auto-fit, minmax(250px, 1fr))",
+      "repeat(auto-fit, minmax(170px, 1fr))",
+    gap: "1rem",
+  },
+
+  statCard: {
+    background: "#ffffff",
+    padding: "1rem",
+    borderRadius: "10px",
+    border: "1px solid #e2e8f0",
+  },
+
+  statTitle: {
+    color: "#64748b",
+    fontSize: "0.85rem",
+    fontWeight: 600,
+  },
+
+  statValue: {
+    fontSize: "1.8rem",
+    fontWeight: 800,
+    marginTop: "0.35rem",
+  },
+
+  twoColumn: {
+    display: "grid",
+    gridTemplateColumns:
+      "repeat(auto-fit, minmax(300px, 1fr))",
     gap: "1rem",
     marginTop: "1rem",
   },
@@ -97,12 +336,55 @@ const styles = {
     background: "#ffffff",
     padding: "1.25rem",
     borderRadius: "10px",
-    border:
-      "1px solid #e2e8f0",
+    border: "1px solid #e2e8f0",
   },
 
-  link: {
-    textDecoration: "none",
-    color: "inherit",
+  cardHeader: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: "1rem",
+  },
+
+  list: {
+    display: "flex",
+    flexDirection: "column",
+    gap: "0.75rem",
+    marginTop: "1rem",
+  },
+
+  listItem: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: "1rem",
+    padding: "0.75rem 0",
+    borderBottom: "1px solid #e2e8f0",
+  },
+
+  muted: {
+    color: "#64748b",
+    fontSize: "0.8rem",
+    marginTop: "0.2rem",
+  },
+
+  badge: {
+    padding: "0.3rem 0.6rem",
+    borderRadius: "999px",
+    background: "#e2e8f0",
+    fontSize: "0.75rem",
+    fontWeight: 700,
+  },
+
+  score: {
+    fontWeight: 800,
+  },
+
+  error: {
+    background: "#fee2e2",
+    color: "#991b1b",
+    padding: "0.75rem",
+    borderRadius: "8px",
+    marginTop: "1rem",
   },
 };

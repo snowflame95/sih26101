@@ -1,70 +1,78 @@
-import { useState } from "react";
-import apiClient from "../api/client";
+import { useEffect, useState } from "react";
+
+import adminApi from "../api/adminApi";
+
 
 export default function AdminUsersPage() {
-  const [form, setForm] = useState({
-    email: "",
-    password: "",
-    role: "trainer",
-  });
+  const [users, setUsers] = useState([]);
 
-  const [message, setMessage] = useState("");
+  const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [message, setMessage] = useState("");
+  const [updatingUserId, setUpdatingUserId] = useState(null);
 
-  const handleChange = (event) => {
-    const { name, value } = event.target;
 
-    setForm((previous) => ({
-      ...previous,
-      [name]: value,
-    }));
-  };
-
-  const handleSubmit = async (event) => {
-    event.preventDefault();
-
-    setMessage("");
+  const loadUsers = async () => {
+    setIsLoading(true);
     setError("");
-    setIsSubmitting(true);
 
     try {
-      await apiClient.post(
-        "/api/auth/users",
-        {
-          email: form.email,
-          password: form.password,
-          role: form.role,
-        },
-        {
-          auth: true,
-        }
-      );
-
-      setMessage(`${form.role} account created successfully.`);
-
-      setForm({
-        email: "",
-        password: "",
-        role: "trainer",
-      });
+      const data = await adminApi.getUsers();
+      setUsers(data);
     } catch (err) {
       setError(
         err?.message ||
-          "Unable to create account"
+          "Unable to load users."
       );
     } finally {
-      setIsSubmitting(false);
+      setIsLoading(false);
     }
   };
+
+
+  useEffect(() => {
+    loadUsers();
+  }, []);
+
+
+  const handleRoleChange = async (
+    userId,
+    role
+  ) => {
+    setMessage("");
+    setError("");
+    setUpdatingUserId(userId);
+
+    try {
+      await adminApi.updateUserRole(
+        userId,
+        role
+      );
+
+      setMessage(
+        "User role updated successfully."
+      );
+
+      await loadUsers();
+    } catch (err) {
+      setError(
+        err?.message ||
+          "Unable to update user role."
+      );
+    } finally {
+      setUpdatingUserId(null);
+    }
+  };
+
 
   return (
     <div>
       <h1>User Management</h1>
 
       <p style={styles.subtitle}>
-        Create privileged Trainer or Admin accounts.
+        View platform users and manage their roles.
       </p>
+
 
       {message && (
         <div style={styles.success}>
@@ -72,83 +80,173 @@ export default function AdminUsersPage() {
         </div>
       )}
 
+
       {error && (
         <div style={styles.error}>
           {error}
         </div>
       )}
 
+
+      <div style={styles.infoCard}>
+        <strong>
+          Privileged account provisioning
+        </strong>
+
+        <p style={styles.infoText}>
+          New Trainer and Admin accounts are
+          provisioned through the protected backend
+          registration flow. The special registration
+          key is intentionally never exposed to the
+          frontend.
+        </p>
+      </div>
+
+
       <div style={styles.card}>
-        <h2>Create Privileged Account</h2>
-
-        <form onSubmit={handleSubmit}>
-          <label style={styles.label}>
-            Email
-          </label>
-
-          <input
-            type="email"
-            name="email"
-            value={form.email}
-            onChange={handleChange}
-            required
-            style={styles.input}
-            placeholder="Enter email address"
-          />
-
-          <label style={styles.label}>
-            Password
-          </label>
-
-          <input
-            type="password"
-            name="password"
-            value={form.password}
-            onChange={handleChange}
-            minLength={8}
-            required
-            style={styles.input}
-            placeholder="Minimum 8 characters"
-          />
-
-          <label style={styles.label}>
-            Role
-          </label>
-
-          <select
-            name="role"
-            value={form.role}
-            onChange={handleChange}
-            style={styles.input}
-          >
-            <option value="trainer">
-              Trainer
-            </option>
-
-            <option value="admin">
-              Admin
-            </option>
-          </select>
+        <div style={styles.tableHeader}>
+          <h2>
+            Platform Users
+          </h2>
 
           <button
-            type="submit"
-            disabled={isSubmitting}
-            style={{
-              ...styles.button,
-              ...(isSubmitting
-                ? styles.buttonDisabled
-                : {}),
-            }}
+            type="button"
+            onClick={loadUsers}
+            disabled={isLoading}
+            style={styles.refreshButton}
           >
-            {isSubmitting
-              ? "Creating..."
-              : "Create Account"}
+            Refresh
           </button>
-        </form>
+        </div>
+
+
+        {isLoading ? (
+          <p>
+            Loading users...
+          </p>
+        ) : users.length === 0 ? (
+          <p>
+            No users found.
+          </p>
+        ) : (
+          <div style={styles.tableWrapper}>
+            <table style={styles.table}>
+              <thead>
+                <tr>
+                  <th style={styles.th}>
+                    ID
+                  </th>
+
+                  <th style={styles.th}>
+                    Email
+                  </th>
+
+                  <th style={styles.th}>
+                    Role
+                  </th>
+
+                  <th style={styles.th}>
+                    Status
+                  </th>
+
+                  <th style={styles.th}>
+                    Profile
+                  </th>
+
+                  <th style={styles.th}>
+                    Actions
+                  </th>
+                </tr>
+              </thead>
+
+              <tbody>
+                {users.map((item) => (
+                  <tr key={item.id}>
+                    <td style={styles.td}>
+                      {item.id}
+                    </td>
+
+                    <td style={styles.td}>
+                      {item.email}
+                    </td>
+
+                    <td style={styles.td}>
+                      <strong>
+                        {item.role}
+                      </strong>
+                    </td>
+
+                    <td style={styles.td}>
+                      {item.is_active
+                        ? "Active"
+                        : "Inactive"}
+                    </td>
+
+                    <td style={styles.td}>
+                      {item.profile ? (
+                        <div>
+                          <strong>
+                            {item.profile.full_name}
+                          </strong>
+
+                          <div style={styles.small}>
+                            {item.profile.designation}
+                          </div>
+
+                          <div style={styles.small}>
+                            {item.profile.department}
+                          </div>
+                        </div>
+                      ) : (
+                        <span style={styles.muted}>
+                          Not completed
+                        </span>
+                      )}
+                    </td>
+
+                    <td style={styles.td}>
+                      <select
+                        value={item.role}
+                        disabled={
+                          updatingUserId ===
+                          item.id
+                        }
+                        onChange={(event) =>
+                          handleRoleChange(
+                            item.id,
+                            event.target.value
+                          )
+                        }
+                        style={styles.select}
+                      >
+                        <option value="learner">
+                          Learner
+                        </option>
+
+                        <option value="tester">
+                          Tester
+                        </option>
+
+                        <option value="trainer">
+                          Trainer
+                        </option>
+
+                        <option value="admin">
+                          Admin
+                        </option>
+                      </select>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   );
 }
+
 
 const styles = {
   subtitle: {
@@ -156,44 +254,81 @@ const styles = {
     marginBottom: "1rem",
   },
 
+  infoCard: {
+    background: "#f8fafc",
+    border: "1px solid #cbd5e1",
+    padding: "1rem",
+    borderRadius: "10px",
+    marginBottom: "1rem",
+  },
+
+  infoText: {
+    color: "#475569",
+    marginBottom: 0,
+  },
+
   card: {
-    maxWidth: "600px",
     background: "#ffffff",
-    padding: "1.5rem",
+    padding: "1.25rem",
     borderRadius: "10px",
     border: "1px solid #e2e8f0",
-    marginTop: "1rem",
   },
 
-  label: {
-    display: "block",
-    marginBottom: "0.4rem",
-    fontWeight: 600,
-  },
-
-  input: {
-    width: "100%",
-    padding: "0.75rem",
+  tableHeader: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: "1rem",
     marginBottom: "1rem",
-    border: "1px solid #cbd5e1",
-    borderRadius: "8px",
-    boxSizing: "border-box",
-    background: "#ffffff",
   },
 
-  button: {
+  refreshButton: {
     border: "none",
     background: "#0f172a",
     color: "#ffffff",
-    padding: "0.75rem 1rem",
+    padding: "0.6rem 0.9rem",
     borderRadius: "8px",
     fontWeight: 700,
     cursor: "pointer",
   },
 
-  buttonDisabled: {
-    opacity: 0.6,
-    cursor: "not-allowed",
+  tableWrapper: {
+    overflowX: "auto",
+  },
+
+  table: {
+    width: "100%",
+    borderCollapse: "collapse",
+  },
+
+  th: {
+    textAlign: "left",
+    padding: "0.75rem",
+    borderBottom: "2px solid #e2e8f0",
+    whiteSpace: "nowrap",
+  },
+
+  td: {
+    padding: "0.75rem",
+    borderBottom: "1px solid #e2e8f0",
+    verticalAlign: "top",
+  },
+
+  select: {
+    padding: "0.5rem",
+    border: "1px solid #cbd5e1",
+    borderRadius: "6px",
+    background: "#ffffff",
+  },
+
+  small: {
+    fontSize: "0.8rem",
+    color: "#64748b",
+    marginTop: "0.15rem",
+  },
+
+  muted: {
+    color: "#64748b",
   },
 
   success: {

@@ -4,6 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.db.init_db import init_db
+from app.routes.admin import router as admin_router
 from app.routes.auth import router as auth_router
 from app.routes.assessment import router as assessment_router
 from app.routes.competency import router as competency_router
@@ -34,6 +35,7 @@ app.add_middleware(
 
 
 app.include_router(auth_router)
+app.include_router(admin_router)
 app.include_router(assessment_router)
 app.include_router(competency_router)
 app.include_router(profile_router)
