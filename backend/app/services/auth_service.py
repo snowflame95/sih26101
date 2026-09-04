@@ -16,6 +16,15 @@ def get_user_by_email(
     )
 
 
+def get_user_by_id(
+    db: Session,
+    user_id: int,
+) -> User | None:
+    return db.scalar(
+        select(User).where(User.id == user_id)
+    )
+
+
 def create_user(
     db: Session,
     user_data: UserCreate,
@@ -31,6 +40,9 @@ def create_user(
             "User with this email already exists"
         )
 
+    # Public registration always creates a learner.
+    # Privileged roles must be assigned through
+    # protected admin functionality.
     user = User(
         email=user_data.email,
         hashed_password=hash_password(
@@ -40,6 +52,29 @@ def create_user(
     )
 
     db.add(user)
+    db.commit()
+    db.refresh(user)
+
+    return user
+
+
+def update_user_role(
+    db: Session,
+    user_id: int,
+    role: UserRole,
+) -> User:
+    user = get_user_by_id(
+        db,
+        user_id,
+    )
+
+    if user is None:
+        raise ValueError(
+            "User not found"
+        )
+
+    user.role = role.value
+
     db.commit()
     db.refresh(user)
 

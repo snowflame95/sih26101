@@ -1,11 +1,25 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.core.security import create_access_token, get_current_user
+from app.core.security import (
+    create_access_token,
+    get_current_user,
+    require_role,
+)
 from app.db.database import get_db
 from app.db.models.user import User
-from app.schemas.user import TokenResponse, UserCreate, UserLogin, UserResponse
-from app.services.auth_service import authenticate_user, create_user
+from app.schemas.user import (
+    TokenResponse,
+    UserCreate,
+    UserLogin,
+    UserResponse,
+    UserRoleUpdate,
+)
+from app.services.auth_service import (
+    authenticate_user,
+    create_user,
+    update_user_role,
+)
 
 
 router = APIRouter(
@@ -69,3 +83,30 @@ def get_me(
     current_user: User = Depends(get_current_user),
 ):
     return current_user
+
+
+@router.patch(
+    "/users/{user_id}/role",
+    response_model=UserResponse,
+)
+def update_role(
+    user_id: int,
+    role_data: UserRoleUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(
+        require_role("admin")
+    ),
+):
+    try:
+        user = update_user_role(
+            db,
+            user_id,
+            role_data.role,
+        )
+        return user
+
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc

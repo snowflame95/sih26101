@@ -10,22 +10,42 @@ const ROLE_DETAILS = {
   learner: {
     label: "Learner",
     summary: "Access learning modules, studies, and personal progress tracking.",
-    permissions: ["Take assessments", "Track learning progress", "Review personal roadmap"],
+    permissions: [
+      "Take assessments",
+      "Track learning progress",
+      "Review personal roadmap",
+    ],
   },
   tester: {
     label: "Tester",
-    summary: "Your tester workspace foundation is ready for a future assignment workflow.",
-    permissions: ["Use authenticated learner features", "Maintain your profile", "Tester tools will be added in a later phase"],
+    summary:
+      "Your tester workspace foundation is ready for assignment and review workflows.",
+    permissions: [
+      "Use authenticated learner features",
+      "Maintain your profile",
+      "Access tester assignment and review tools",
+    ],
   },
   trainer: {
     label: "Trainer",
-    summary: "Can create learning content and guide learner progress through modules.",
-    permissions: ["Use authenticated learner features", "Create learning modules through authorized APIs", "Trainer workspace will be added in a later phase"],
+    summary:
+      "Create learning content, assessments, and assignments for learners.",
+    permissions: [
+      "Use authenticated learner features",
+      "Create and manage learning modules",
+      "Create and manage assessments",
+      "Assign assessments to learners",
+    ],
   },
   admin: {
     label: "Admin",
-    summary: "Your admin workspace foundation is ready for future platform management features.",
-    permissions: ["Use authenticated learner features", "Use currently authorized content APIs", "Admin tools will be added in a later phase"],
+    summary:
+      "Manage platform users, content, assessments, and administrative workflows.",
+    permissions: [
+      "Use authenticated learner features",
+      "Use authorized content and assessment APIs",
+      "Manage platform roles through protected admin functionality",
+    ],
   },
 };
 
@@ -39,7 +59,14 @@ export default function DashboardPage() {
   useEffect(() => {
     const loadSummary = async () => {
       try {
-        const [competencies, assessments, attempts, modules, progress, roadmap] = await Promise.all([
+        const [
+          competencies,
+          assessments,
+          attempts,
+          modules,
+          progress,
+          roadmap,
+        ] = await Promise.all([
           competencyApi.getMyCompetencies(),
           assessmentApi.listAssessments(),
           assessmentApi.getMyAttempts(),
@@ -57,7 +84,9 @@ export default function DashboardPage() {
           roadmap: roadmap || [],
         });
       } catch (loadError) {
-        setError(loadError?.message || "Unable to load dashboard summary.");
+        setError(
+          loadError?.message || "Unable to load dashboard summary."
+        );
       }
     };
 
@@ -68,7 +97,10 @@ export default function DashboardPage() {
     <div style={styles.page}>
       <div style={styles.card}>
         <h1>Dashboard</h1>
-        <p style={styles.subtitle}>Welcome to your skill intelligence workspace.</p>
+
+        <p style={styles.subtitle}>
+          Welcome to your skill intelligence workspace.
+        </p>
 
         {error ? <ErrorMessage message={error} /> : null}
 
@@ -86,6 +118,7 @@ export default function DashboardPage() {
 
         <div style={styles.permissionBox}>
           <strong>{roleInfo.summary}</strong>
+
           <ul style={styles.permissionList}>
             {roleInfo.permissions.map((permission) => (
               <li key={permission}>{permission}</li>
@@ -95,12 +128,43 @@ export default function DashboardPage() {
 
         {summary ? (
           <div style={styles.summaryGrid}>
-            <div style={styles.summaryItem}><strong>{summary.competencies.length}</strong><span>Competencies</span></div>
-            <div style={styles.summaryItem}><strong>{summary.assessments.length}</strong><span>Available assessments</span></div>
-            <div style={styles.summaryItem}><strong>{summary.attempts.length}</strong><span>Attempts completed</span></div>
-            <div style={styles.summaryItem}><strong>{summary.progress.filter((item) => item.status === "completed").length}</strong><span>Modules completed</span></div>
-            <div style={styles.summaryItem}><strong>{summary.progress.length}/{summary.modules.length}</strong><span>Modules started</span></div>
-            <div style={styles.summaryItem}><strong>{summary.roadmap.length}</strong><span>Roadmap skills</span></div>
+            <div style={styles.summaryItem}>
+              <strong>{summary.competencies.length}</strong>
+              <span>Competencies</span>
+            </div>
+
+            <div style={styles.summaryItem}>
+              <strong>{summary.assessments.length}</strong>
+              <span>Available assessments</span>
+            </div>
+
+            <div style={styles.summaryItem}>
+              <strong>{summary.attempts.length}</strong>
+              <span>Attempts completed</span>
+            </div>
+
+            <div style={styles.summaryItem}>
+              <strong>
+                {
+                  summary.progress.filter(
+                    (item) => item.status === "completed"
+                  ).length
+                }
+              </strong>
+              <span>Modules completed</span>
+            </div>
+
+            <div style={styles.summaryItem}>
+              <strong>
+                {summary.progress.length}/{summary.modules.length}
+              </strong>
+              <span>Modules started</span>
+            </div>
+
+            <div style={styles.summaryItem}>
+              <strong>{summary.roadmap.length}</strong>
+              <span>Roadmap skills</span>
+            </div>
           </div>
         ) : null}
 
@@ -121,6 +185,7 @@ const styles = {
     alignItems: "center",
     justifyContent: "center",
   },
+
   card: {
     width: "100%",
     maxWidth: "640px",
@@ -129,10 +194,12 @@ const styles = {
     boxShadow: "0 10px 30px rgba(15, 23, 42, 0.08)",
     padding: "2rem",
   },
+
   subtitle: {
     color: "#475569",
     marginBottom: "1.5rem",
   },
+
   roleBadge: {
     display: "inline-flex",
     alignItems: "center",
@@ -143,6 +210,7 @@ const styles = {
     fontWeight: 700,
     marginBottom: "1rem",
   },
+
   infoRow: {
     display: "flex",
     justifyContent: "space-between",
@@ -150,6 +218,7 @@ const styles = {
     padding: "0.85rem 0",
     borderBottom: "1px solid #e2e8f0",
   },
+
   permissionBox: {
     marginTop: "1rem",
     border: "1px solid #e2e8f0",
@@ -157,18 +226,21 @@ const styles = {
     background: "#f8fafc",
     padding: "1rem",
   },
+
   permissionList: {
     margin: "0.75rem 0 0 1.2rem",
     color: "#334155",
     display: "grid",
     gap: "0.45rem",
   },
+
   summaryGrid: {
     display: "grid",
     gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))",
     gap: "0.75rem",
     marginTop: "1rem",
   },
+
   summaryItem: {
     display: "grid",
     gap: "0.25rem",
@@ -177,6 +249,7 @@ const styles = {
     padding: "0.85rem",
     color: "#475569",
   },
+
   button: {
     marginTop: "1.5rem",
     border: "none",

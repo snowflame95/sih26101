@@ -89,8 +89,15 @@ def assign_assessment(
         assignment = create_assignment(db, current_user.id, assignment_data)
         return get_assignment_response(db, assignment)
     except ValueError as exc:
-        code = status.HTTP_409_CONFLICT if "already assigned" in str(exc).lower() else status.HTTP_404_NOT_FOUND
-        raise HTTPException(status_code=code, detail=str(exc)) from exc
+        code = (
+            status.HTTP_409_CONFLICT
+            if "already assigned" in str(exc).lower()
+            else status.HTTP_404_NOT_FOUND
+        )
+        raise HTTPException(
+            status_code=code,
+            detail=str(exc),
+        ) from exc
 
 
 @router.get(
@@ -110,7 +117,9 @@ def list_my_assignments(
 )
 def list_assigned_reviews(
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role("tester")),
+    current_user: User = Depends(
+        require_role("tester", *CONTENT_MANAGER_ROLES)
+    ),
 ):
     return get_review_assignments(db)
 
@@ -124,9 +133,19 @@ def get_assignment(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    assignment = get_assignment_for_user(db, assignment_id, current_user.id, current_user.role == "tester")
+    assignment = get_assignment_for_user(
+        db,
+        assignment_id,
+        current_user.id,
+        current_user.role == "tester",
+    )
+
     if assignment is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Assessment assignment not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Assessment assignment not found",
+        )
+
     return assignment
 
 
@@ -141,9 +160,16 @@ def review_assigned_assessment(
     current_user: User = Depends(require_role("tester")),
 ):
     try:
-        return review_assignment(db, assignment_id, feedback_data)
+        return review_assignment(
+            db,
+            assignment_id,
+            feedback_data,
+        )
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
 
 
 # ---------------------------------------------------------
@@ -158,7 +184,9 @@ def review_assigned_assessment(
 def create_new_assessment(
     assessment_data: AssessmentCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role(*CONTENT_MANAGER_ROLES)),
+    current_user: User = Depends(
+        require_role(*CONTENT_MANAGER_ROLES)
+    ),
 ):
     try:
         return create_assessment(
@@ -200,10 +228,20 @@ def _authoring_response(assessment):
 )
 def list_manage_assessments(
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role(*CONTENT_MANAGER_ROLES)),
+    current_user: User = Depends(
+        require_role(*CONTENT_MANAGER_ROLES)
+    ),
 ):
-    assessments = db.query(Assessment).order_by(Assessment.created_at.desc()).all()
-    return [_authoring_response(assessment) for assessment in assessments]
+    assessments = (
+        db.query(Assessment)
+        .order_by(Assessment.created_at.desc())
+        .all()
+    )
+
+    return [
+        _authoring_response(assessment)
+        for assessment in assessments
+    ]
 
 
 @router.get(
@@ -213,11 +251,21 @@ def list_manage_assessments(
 def get_manage_assessment_detail(
     assessment_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role(*CONTENT_MANAGER_ROLES)),
+    current_user: User = Depends(
+        require_role(*CONTENT_MANAGER_ROLES)
+    ),
 ):
-    assessment = get_manage_assessment(db, assessment_id)
+    assessment = get_manage_assessment(
+        db,
+        assessment_id,
+    )
+
     if assessment is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Assessment not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Assessment not found",
+        )
+
     return _authoring_response(assessment)
 
 
@@ -229,12 +277,23 @@ def edit_assessment(
     assessment_id: int,
     assessment_data: AssessmentUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role(*CONTENT_MANAGER_ROLES)),
+    current_user: User = Depends(
+        require_role(*CONTENT_MANAGER_ROLES)
+    ),
 ):
     try:
-        return _authoring_response(update_assessment(db, assessment_id, assessment_data))
+        return _authoring_response(
+            update_assessment(
+                db,
+                assessment_id,
+                assessment_data,
+            )
+        )
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
 
 
 @router.delete(
@@ -244,13 +303,27 @@ def edit_assessment(
 def remove_assessment(
     assessment_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role(*CONTENT_MANAGER_ROLES)),
+    current_user: User = Depends(
+        require_role(*CONTENT_MANAGER_ROLES)
+    ),
 ):
     try:
-        delete_assessment(db, assessment_id)
+        delete_assessment(
+            db,
+            assessment_id,
+        )
     except ValueError as exc:
-        code = status.HTTP_409_CONFLICT if "attempts" in str(exc).lower() else status.HTTP_404_NOT_FOUND
-        raise HTTPException(status_code=code, detail=str(exc)) from exc
+        code = (
+            status.HTTP_409_CONFLICT
+            if "attempts" in str(exc).lower()
+            else status.HTTP_404_NOT_FOUND
+        )
+
+        raise HTTPException(
+            status_code=code,
+            detail=str(exc),
+        ) from exc
+
     return None
 
 
@@ -263,13 +336,30 @@ def add_question(
     assessment_id: int,
     question_data: AssessmentQuestionCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role(*CONTENT_MANAGER_ROLES)),
+    current_user: User = Depends(
+        require_role(*CONTENT_MANAGER_ROLES)
+    ),
 ):
     try:
-        return add_assessment_question(db, assessment_id, question_data)
+        return add_assessment_question(
+            db,
+            assessment_id,
+            question_data,
+        )
     except ValueError as exc:
-        code = status.HTTP_400_BAD_REQUEST if "answer" in str(exc).lower() or "options" in str(exc).lower() else status.HTTP_404_NOT_FOUND
-        raise HTTPException(status_code=code, detail=str(exc)) from exc
+        code = (
+            status.HTTP_400_BAD_REQUEST
+            if (
+                "answer" in str(exc).lower()
+                or "options" in str(exc).lower()
+            )
+            else status.HTTP_404_NOT_FOUND
+        )
+
+        raise HTTPException(
+            status_code=code,
+            detail=str(exc),
+        ) from exc
 
 
 @router.put(
@@ -280,13 +370,30 @@ def edit_question(
     question_id: int,
     question_data: AssessmentQuestionUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role(*CONTENT_MANAGER_ROLES)),
+    current_user: User = Depends(
+        require_role(*CONTENT_MANAGER_ROLES)
+    ),
 ):
     try:
-        return update_assessment_question(db, question_id, question_data)
+        return update_assessment_question(
+            db,
+            question_id,
+            question_data,
+        )
     except ValueError as exc:
-        code = status.HTTP_400_BAD_REQUEST if "answer" in str(exc).lower() or "options" in str(exc).lower() else status.HTTP_404_NOT_FOUND
-        raise HTTPException(status_code=code, detail=str(exc)) from exc
+        code = (
+            status.HTTP_400_BAD_REQUEST
+            if (
+                "answer" in str(exc).lower()
+                or "options" in str(exc).lower()
+            )
+            else status.HTTP_404_NOT_FOUND
+        )
+
+        raise HTTPException(
+            status_code=code,
+            detail=str(exc),
+        ) from exc
 
 
 @router.delete(
@@ -296,13 +403,27 @@ def edit_question(
 def remove_question(
     question_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_role(*CONTENT_MANAGER_ROLES)),
+    current_user: User = Depends(
+        require_role(*CONTENT_MANAGER_ROLES)
+    ),
 ):
     try:
-        delete_assessment_question(db, question_id)
+        delete_assessment_question(
+            db,
+            question_id,
+        )
     except ValueError as exc:
-        code = status.HTTP_409_CONFLICT if "answers" in str(exc).lower() else status.HTTP_404_NOT_FOUND
-        raise HTTPException(status_code=code, detail=str(exc)) from exc
+        code = (
+            status.HTTP_409_CONFLICT
+            if "answers" in str(exc).lower()
+            else status.HTTP_404_NOT_FOUND
+        )
+
+        raise HTTPException(
+            status_code=code,
+            detail=str(exc),
+        ) from exc
+
     return None
 
 
@@ -474,12 +595,8 @@ def submit_user_assessment(
 
         if (
             message.startswith("Invalid question ID")
-            or message.startswith(
-                "Invalid answer option"
-            )
-            or message == (
-                "Duplicate question IDs are not allowed"
-            )
+            or message.startswith("Invalid answer option")
+            or message == "Duplicate question IDs are not allowed"
         ):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,

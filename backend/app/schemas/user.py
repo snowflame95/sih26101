@@ -17,6 +17,10 @@ class UserLogin(BaseModel):
     password: str
 
 
+class UserRoleUpdate(BaseModel):
+    role: UserRole
+
+
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
