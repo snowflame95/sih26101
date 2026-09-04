@@ -35,13 +35,63 @@ function App() {
           }
         >
           <Route path="/dashboard" element={<DashboardPage />} />
+
           <Route path="/profile" element={<ProfilePage />} />
-          <Route path="/competencies" element={<CompetenciesPage />} />
-          <Route path="/assessment" element={<AssessmentPage />} />
-          <Route path="/assessment-history" element={<AssessmentHistoryPage />} />
-          <Route path="/assigned-assessments" element={<AssignedAssessmentsPage />} />
-          <Route path="/learning" element={<LearningPage />} />
-          <Route path="/roadmap" element={<RoadmapPage />} />
+
+          <Route
+            path="/competencies"
+            element={
+              <ProtectedRoute allowedRoles={["learner"]}>
+                <CompetenciesPage />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/assessment"
+            element={
+              <ProtectedRoute allowedRoles={["learner"]}>
+                <AssessmentPage />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/assessment-history"
+            element={
+              <ProtectedRoute allowedRoles={["learner"]}>
+                <AssessmentHistoryPage />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/assigned-assessments"
+            element={
+              <ProtectedRoute allowedRoles={["learner"]}>
+                <AssignedAssessmentsPage />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/learning"
+            element={
+              <ProtectedRoute allowedRoles={["learner"]}>
+                <LearningPage />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/roadmap"
+            element={
+              <ProtectedRoute allowedRoles={["learner"]}>
+                <RoadmapPage />
+              </ProtectedRoute>
+            }
+          />
+
           <Route
             path="/trainer"
             element={
@@ -50,6 +100,7 @@ function App() {
               </ProtectedRoute>
             }
           />
+
           <Route
             path="/trainer/modules"
             element={
@@ -58,6 +109,7 @@ function App() {
               </ProtectedRoute>
             }
           />
+
           <Route
             path="/trainer/assessments"
             element={
@@ -66,6 +118,7 @@ function App() {
               </ProtectedRoute>
             }
           />
+
           <Route
             path="/trainer/assignments"
             element={
@@ -74,6 +127,7 @@ function App() {
               </ProtectedRoute>
             }
           />
+
           <Route
             path="/tester"
             element={
@@ -96,7 +150,10 @@ export const healthCheck = async () => {
     const response = await authApi.healthCheck();
     return response;
   } catch (error) {
-    return { status: "disconnected", message: error.message };
+    return {
+      status: "disconnected",
+      message: error.message,
+    };
   }
 };
 
