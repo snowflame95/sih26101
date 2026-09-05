@@ -31,6 +31,12 @@ const NAV_ITEMS = [
   },
 
   {
+    label: "Skill Intelligence",
+    to: "/skill-intelligence",
+    roles: ["learner"],
+  },
+
+  {
     label: "Assessment",
     to: "/assessment",
     roles: ["learner"],
