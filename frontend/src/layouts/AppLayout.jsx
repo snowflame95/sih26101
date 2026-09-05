@@ -90,6 +90,12 @@ const NAV_ITEMS = [
   },
 
   {
+    label: "AI Quiz Generator",
+    to: "/trainer/quiz-generator",
+    roles: ["trainer"],
+  },
+
+  {
     label: "Assign Assessments",
     to: "/trainer/assignments",
     roles: ["trainer"],
@@ -164,6 +170,10 @@ export default function AppLayout() {
   return (
     <div style={styles.shell}>
 
+      {/* ====================================================
+          SIDEBAR
+      ==================================================== */}
+
       <aside style={styles.sidebar}>
 
         <div style={styles.brandBlock}>
@@ -207,6 +217,10 @@ export default function AppLayout() {
       </aside>
 
 
+      {/* ====================================================
+          MAIN APPLICATION
+      ==================================================== */}
+
       <main style={styles.main}>
 
         <header style={styles.header}>
@@ -225,6 +239,7 @@ export default function AppLayout() {
 
 
           <button
+            type="button"
             onClick={logout}
             style={styles.logoutButton}
           >
@@ -259,6 +274,7 @@ const styles = {
     color: "#e2e8f0",
     padding: "1.5rem 1rem",
     boxSizing: "border-box",
+    flexShrink: 0,
   },
 
   brandBlock: {
@@ -300,6 +316,8 @@ const styles = {
     padding: "0.75rem 0.9rem",
     borderRadius: "8px",
     fontWeight: 600,
+    transition:
+      "background-color 0.15s ease, color 0.15s ease",
   },
 
   navLinkActive: {
@@ -343,5 +361,6 @@ const styles = {
   content: {
     padding: "1.5rem",
     flex: 1,
+    minWidth: 0,
   },
 };

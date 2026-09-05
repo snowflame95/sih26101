@@ -99,12 +99,14 @@ class QuizGenerationResponseError(QuizGenerationError):
 
 def _get_gemini_model():
     """
-    Create and return the configured Gemini model.
+    Create and return the configured Gemini client.
+
+    Uses the modern google-genai SDK.
 
     The API key and model are loaded from application settings.
 
     Returns:
-        Configured Gemini GenerativeModel instance.
+        Configured Gemini Client instance.
     """
 
     if not settings.AI_ENABLED:
@@ -123,26 +125,21 @@ def _get_gemini_model():
         )
 
     try:
-        import google.generativeai as genai
+        from google import genai
 
     except ImportError as exc:
         raise AIUnavailableError(
-            "Gemini support requires the 'google-generativeai' "
-            "package."
+            "Gemini support requires the 'google-genai' package."
         ) from exc
 
     try:
-        genai.configure(
+        return genai.Client(
             api_key=settings.GEMINI_API_KEY
-        )
-
-        return genai.GenerativeModel(
-            model_name=settings.GEMINI_MODEL
         )
 
     except Exception as exc:
         raise AIUnavailableError(
-            "Unable to initialize the Gemini model."
+            "Unable to initialize the Gemini client."
         ) from exc
 
 
@@ -368,7 +365,9 @@ SUPPLIED LEARNING MATERIAL:
 # ============================================================
 
 
-def _extract_json_from_response(response_text: str) -> dict[str, Any]:
+def _extract_json_from_response(
+    response_text: str,
+) -> dict[str, Any]:
     """
     Convert Gemini's response into a Python dictionary.
 
@@ -453,8 +452,13 @@ def _validate_option(
             f"Question option {index + 1} is invalid."
         )
 
-    value = str(option.get("value", "")).strip().upper()
-    text = str(option.get("text", "")).strip()
+    value = str(
+        option.get("value", "")
+    ).strip().upper()
+
+    text = str(
+        option.get("text", "")
+    ).strip()
 
     if value not in {"A", "B", "C", "D"}:
         raise QuizGenerationResponseError(
@@ -779,11 +783,16 @@ def generate_quiz_from_text(
         competency_name=competency_name,
     )
 
-    model = _get_gemini_model()
+    # --------------------------------------------------------
+    # Initialize modern Gemini client
+    # --------------------------------------------------------
+
+    client = _get_gemini_model()
 
     try:
-        response = model.generate_content(
-            prompt
+        response = client.models.generate_content(
+            model=settings.GEMINI_MODEL,
+            contents=prompt,
         )
 
     except Exception as exc:
@@ -794,6 +803,10 @@ def generate_quiz_from_text(
         raise QuizGenerationError(
             "Gemini failed while generating the quiz."
         ) from exc
+
+    # --------------------------------------------------------
+    # Extract response text
+    # --------------------------------------------------------
 
     response_text = getattr(
         response,
@@ -806,9 +819,17 @@ def generate_quiz_from_text(
             "Gemini returned no usable text."
         )
 
+    # --------------------------------------------------------
+    # Parse Gemini JSON
+    # --------------------------------------------------------
+
     parsed_response = _extract_json_from_response(
         response_text
     )
+
+    # --------------------------------------------------------
+    # Validate complete quiz
+    # --------------------------------------------------------
 
     validated_quiz = _validate_quiz(
         data=parsed_response,

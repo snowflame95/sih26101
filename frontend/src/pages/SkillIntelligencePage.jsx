@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import aiApi from "../api/aiApi";
 
@@ -31,7 +31,13 @@ function formatPercentage(value) {
     return null;
   }
 
-  return `${value}%`;
+  const numericValue = Number(value);
+
+  if (Number.isNaN(numericValue)) {
+    return null;
+  }
+
+  return `${numericValue.toFixed(1)}%`;
 }
 
 
@@ -99,6 +105,34 @@ function getGapStyle(gap) {
 }
 
 
+function getGapLabel(gap) {
+  if (gap >= 4) {
+    return "Critical development gap";
+  }
+
+  if (gap >= 2) {
+    return "Significant development gap";
+  }
+
+  if (gap === 1) {
+    return "Minor development gap";
+  }
+
+  return "Competency aligned";
+}
+
+
+function getRecommendationTypeLabel(resourceType) {
+  if (!resourceType) {
+    return "LEARNING RESOURCE";
+  }
+
+  return resourceType
+    .replaceAll("_", " ")
+    .toUpperCase();
+}
+
+
 function SkillIntelligencePage() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -118,23 +152,14 @@ function SkillIntelligencePage() {
 
       setError("");
 
-      const [analysisResponse, recommendationResponse] =
-        await Promise.all([
-          aiApi.analyseSkills(),
-          aiApi.getRecommendations(),
-        ]);
+      const [
+        analysisResponse,
+        recommendationResponse,
+      ] = await Promise.all([
+        aiApi.analyseSkills(),
+        aiApi.getRecommendations(),
+      ]);
 
-      /*
-       * apiClient returns the parsed response body directly.
-       *
-       * Therefore:
-       *   analysisResponse.items
-       *   recommendationResponse.recommendations
-       *
-       * are used instead of:
-       *   analysisResponse.data
-       *   recommendationResponse.data
-       */
       setData(analysisResponse || null);
 
       setRecommendations(
@@ -145,13 +170,15 @@ function SkillIntelligencePage() {
         recommendationResponse?.source_note || ""
       );
     } catch (err) {
-      console.error("Skill intelligence loading failed:", err);
+      console.error(
+        "Skill intelligence loading failed:",
+        err
+      );
 
-      const message =
+      setError(
         err?.message ||
-        "Unable to load skill intelligence. Please try again.";
-
-      setError(message);
+          "Unable to load skill intelligence. Please try again."
+      );
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -162,6 +189,59 @@ function SkillIntelligencePage() {
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+
+  const items = data?.items || [];
+  const aiAvailable = Boolean(data?.ai_available);
+
+
+  const summary = useMemo(() => {
+    const totalCompetencies = items.length;
+
+    const totalSkillGap = items.reduce(
+      (total, item) =>
+        total + Number(item.gap || 0),
+      0
+    );
+
+    const criticalGaps = items.filter(
+      (item) =>
+        item.priority?.toUpperCase() === "CRITICAL"
+    ).length;
+
+    const highPriorityGaps = items.filter(
+      (item) => {
+        const priority =
+          item.priority?.toUpperCase();
+
+        return (
+          priority === "CRITICAL" ||
+          priority === "HIGH"
+        );
+      }
+    ).length;
+
+    const alignedCompetencies = items.filter(
+      (item) => Number(item.gap || 0) === 0
+    ).length;
+
+    const averageGap =
+      totalCompetencies > 0
+        ? (
+            totalSkillGap /
+            totalCompetencies
+          ).toFixed(1)
+        : "0.0";
+
+    return {
+      totalCompetencies,
+      totalSkillGap,
+      criticalGaps,
+      highPriorityGaps,
+      alignedCompetencies,
+      averageGap,
+    };
+  }, [items]);
 
 
   if (loading) {
@@ -175,8 +255,9 @@ function SkillIntelligencePage() {
           </h1>
 
           <p style={styles.loadingText}>
-            We are analysing your competency profile and
-            preparing personalised learning recommendations.
+            We are analysing your competency profile
+            and preparing personalised learning
+            recommendations.
           </p>
         </div>
       </div>
@@ -188,6 +269,7 @@ function SkillIntelligencePage() {
     return (
       <div style={styles.page}>
         <div style={styles.errorCard}>
+
           <div style={styles.errorIcon}>
             !
           </div>
@@ -204,37 +286,20 @@ function SkillIntelligencePage() {
             type="button"
             onClick={() => loadData(true)}
             disabled={refreshing}
-            style={styles.primaryButton}
+            style={{
+              ...styles.primaryButton,
+              opacity: refreshing ? 0.7 : 1,
+            }}
           >
-            {refreshing ? "Retrying..." : "Try Again"}
+            {refreshing
+              ? "Retrying..."
+              : "Try Again"}
           </button>
+
         </div>
       </div>
     );
   }
-
-
-  const items = data?.items || [];
-  const aiAvailable = Boolean(data?.ai_available);
-
-  const totalCompetencies = items.length;
-
-  const totalSkillGap = items.reduce(
-    (total, item) => total + Number(item.gap || 0),
-    0
-  );
-
-  const criticalGaps = items.filter(
-    (item) =>
-      item.priority?.toUpperCase() === "CRITICAL"
-  ).length;
-
-  const averageGap =
-    totalCompetencies > 0
-      ? (
-          totalSkillGap / totalCompetencies
-        ).toFixed(1)
-      : "0.0";
 
 
   return (
@@ -244,8 +309,10 @@ function SkillIntelligencePage() {
           PAGE HEADER
       ===================================================== */}
 
-      <div style={styles.header}>
-        <div>
+      <header style={styles.header}>
+
+        <div style={styles.headerContent}>
+
           <div style={styles.eyebrow}>
             AI-POWERED SKILL INTELLIGENCE
           </div>
@@ -255,10 +322,11 @@ function SkillIntelligencePage() {
           </h1>
 
           <p style={styles.subtitle}>
-            Understand your current competency levels,
-            identify skill gaps and discover personalised
-            learning opportunities.
+            Understand your competency levels,
+            identify skill gaps and discover
+            personalised learning opportunities.
           </p>
+
         </div>
 
         <button
@@ -274,24 +342,23 @@ function SkillIntelligencePage() {
             ? "Refreshing..."
             : "Refresh Analysis"}
         </button>
-      </div>
+
+      </header>
 
 
       {/* =====================================================
           AI STATUS
       ===================================================== */}
 
-      <div
+      <section
         style={{
           ...styles.statusBanner,
-          background: aiAvailable
-            ? "#ecfdf5"
-            : "#f8fafc",
-          border: aiAvailable
-            ? "1px solid #a7f3d0"
-            : "1px solid #e2e8f0",
+          ...(aiAvailable
+            ? styles.statusBannerAi
+            : styles.statusBannerFallback),
         }}
       >
+
         <div
           style={{
             ...styles.statusDot,
@@ -301,20 +368,29 @@ function SkillIntelligencePage() {
           }}
         />
 
-        <div>
+        <div style={styles.statusContent}>
+
           <strong style={styles.statusTitle}>
             {aiAvailable
               ? "Gemini AI analysis is active"
-              : "Explainable backend analysis is active"}
+              : "Explainable skill analysis is active"}
           </strong>
 
           <p style={styles.statusText}>
             {aiAvailable
-              ? "Your skill analysis includes AI-generated interpretation, strengths, weaknesses and recommended focus areas."
+              ? "Your profile is enriched with AI-generated interpretation, strengths, development areas and recommended focus."
               : "The platform is using deterministic skill-gap analysis because AI enrichment is currently unavailable."}
           </p>
+
         </div>
-      </div>
+
+        <span style={styles.statusBadge}>
+          {aiAvailable
+            ? "AI ENABLED"
+            : "FALLBACK MODE"}
+        </span>
+
+      </section>
 
 
       {/* =====================================================
@@ -322,15 +398,19 @@ function SkillIntelligencePage() {
       ===================================================== */}
 
       {items.length > 0 && (
-        <div style={styles.summaryGrid}>
+        <section style={styles.summaryGrid}>
 
           <div style={styles.summaryCard}>
+            <span style={styles.summaryIcon}>
+              ◈
+            </span>
+
             <span style={styles.summaryLabel}>
               Competencies
             </span>
 
             <strong style={styles.summaryValue}>
-              {totalCompetencies}
+              {summary.totalCompetencies}
             </strong>
 
             <span style={styles.summaryDescription}>
@@ -340,50 +420,62 @@ function SkillIntelligencePage() {
 
 
           <div style={styles.summaryCard}>
+            <span style={styles.summaryIcon}>
+              Δ
+            </span>
+
             <span style={styles.summaryLabel}>
               Average Gap
             </span>
 
             <strong style={styles.summaryValue}>
-              {averageGap}/5
+              {summary.averageGap}/5
             </strong>
 
             <span style={styles.summaryDescription}>
-              Across identified competencies
+              Average development gap
             </span>
           </div>
 
 
           <div style={styles.summaryCard}>
+            <span style={styles.summaryIcon}>
+              !
+            </span>
+
             <span style={styles.summaryLabel}>
               Critical Gaps
             </span>
 
             <strong style={styles.summaryValue}>
-              {criticalGaps}
+              {summary.criticalGaps}
             </strong>
 
             <span style={styles.summaryDescription}>
-              Requiring highest priority
+              Highest-priority competencies
             </span>
           </div>
 
 
           <div style={styles.summaryCard}>
+            <span style={styles.summaryIcon}>
+              ✓
+            </span>
+
             <span style={styles.summaryLabel}>
-              Recommendations
+              Competencies Aligned
             </span>
 
             <strong style={styles.summaryValue}>
-              {recommendations.length}
+              {summary.alignedCompetencies}
             </strong>
 
             <span style={styles.summaryDescription}>
-              Learning resources matched
+              No identified skill gap
             </span>
           </div>
 
-        </div>
+        </section>
       )}
 
 
@@ -392,6 +484,7 @@ function SkillIntelligencePage() {
       ===================================================== */}
 
       {items.length === 0 ? (
+
         <section style={styles.emptyCard}>
 
           <div style={styles.emptyIcon}>
@@ -407,16 +500,36 @@ function SkillIntelligencePage() {
             generating skill intelligence.
           </p>
 
+          <button
+            type="button"
+            onClick={() => loadData(true)}
+            disabled={refreshing}
+            style={styles.primaryButton}
+          >
+            {refreshing
+              ? "Refreshing..."
+              : "Check Again"}
+          </button>
+
         </section>
+
       ) : (
+
         <>
+
           {/* =================================================
               SKILL ANALYSIS
           ================================================= */}
 
           <section>
+
             <div style={styles.sectionHeader}>
+
               <div>
+                <div style={styles.sectionEyebrow}>
+                  COMPETENCY PROFILE
+                </div>
+
                 <h2 style={styles.sectionTitle}>
                   Competency Analysis
                 </h2>
@@ -426,17 +539,29 @@ function SkillIntelligencePage() {
                   the required competency level.
                 </p>
               </div>
+
+              <div style={styles.sectionMeta}>
+                {summary.highPriorityGaps} high-priority
+                {summary.highPriorityGaps === 1
+                  ? " gap"
+                  : " gaps"}
+              </div>
+
             </div>
 
 
             <div style={styles.skillList}>
 
               {items.map((item) => {
+
                 const priorityStyle =
                   getPriorityStyle(item.priority);
 
+                const gap =
+                  Number(item.gap || 0);
+
                 const gapStyle =
-                  getGapStyle(Number(item.gap || 0));
+                  getGapStyle(gap);
 
                 const currentLevel =
                   Number(item.current_level || 0);
@@ -468,28 +593,44 @@ function SkillIntelligencePage() {
                     style={styles.skillCard}
                   >
 
-                    {/* =======================================
+                    {/* =====================================
                         SKILL HEADER
-                    ======================================= */}
+                    ===================================== */}
 
                     <div style={styles.skillHeader}>
 
-                      <div>
+                      <div style={styles.skillHeaderMain}>
+
                         <div style={styles.skillNameRow}>
+
                           <h3 style={styles.skillName}>
                             {item.competency_name}
                           </h3>
 
                           {item.category && (
-                            <span style={styles.categoryBadge}>
+                            <span
+                              style={styles.categoryBadge}
+                            >
                               {item.category}
                             </span>
                           )}
+
                         </div>
 
-                        <span style={styles.statusTextBadge}>
-                          {formatStatus(item.status)}
-                        </span>
+                        <div style={styles.skillSubRow}>
+
+                          <span
+                            style={styles.statusTextBadge}
+                          >
+                            {formatStatus(item.status)}
+                          </span>
+
+                          <span style={styles.gapDescription}>
+                            {getGapLabel(gap)}
+                          </span>
+
+                        </div>
+
                       </div>
 
 
@@ -505,103 +646,129 @@ function SkillIntelligencePage() {
                     </div>
 
 
-                    {/* =======================================
+                    {/* =====================================
                         LEVEL METRICS
-                    ======================================= */}
+                    ===================================== */}
 
                     <div style={styles.levelGrid}>
 
                       <div style={styles.levelCard}>
-                        <span style={styles.metricLabel}>
-                          Current Level
-                        </span>
 
-                        <strong style={styles.metricValue}>
-                          {currentLevel}/5
-                        </strong>
+                        <div style={styles.metricTop}>
+                          <span style={styles.metricLabel}>
+                            Current Level
+                          </span>
+
+                          <strong
+                            style={styles.metricValue}
+                          >
+                            {currentLevel}/5
+                          </strong>
+                        </div>
 
                         <div style={styles.progressTrack}>
                           <div
                             style={{
                               ...styles.progressCurrent,
-                              width: `${currentPercentage}%`,
+                              width:
+                                `${currentPercentage}%`,
                             }}
                           />
                         </div>
+
                       </div>
 
 
                       <div style={styles.levelCard}>
-                        <span style={styles.metricLabel}>
-                          Required Level
-                        </span>
 
-                        <strong style={styles.metricValue}>
-                          {requiredLevel}/5
-                        </strong>
+                        <div style={styles.metricTop}>
+                          <span style={styles.metricLabel}>
+                            Required Level
+                          </span>
+
+                          <strong
+                            style={styles.metricValue}
+                          >
+                            {requiredLevel}/5
+                          </strong>
+                        </div>
 
                         <div style={styles.progressTrack}>
                           <div
                             style={{
                               ...styles.progressRequired,
-                              width: `${requiredPercentage}%`,
+                              width:
+                                `${requiredPercentage}%`,
                             }}
                           />
                         </div>
+
                       </div>
 
 
                       <div style={styles.levelCard}>
+
                         <span style={styles.metricLabel}>
                           Skill Gap
                         </span>
 
                         <strong
                           style={{
-                            ...styles.metricValue,
+                            ...styles.gapValue,
                             ...gapStyle,
-                            padding: "0.2rem 0.55rem",
-                            borderRadius: "7px",
-                            display: "inline-flex",
-                            width: "fit-content",
                           }}
                         >
-                          {item.gap}
+                          {gap}
                         </strong>
 
                         <span style={styles.metricHint}>
                           Points to develop
                         </span>
+
                       </div>
 
 
                       <div style={styles.levelCard}>
+
                         <span style={styles.metricLabel}>
                           Status
                         </span>
 
-                        <strong style={styles.statusMetric}>
+                        <strong
+                          style={styles.statusMetric}
+                        >
                           {formatStatus(item.status)}
                         </strong>
 
                         <span style={styles.metricHint}>
                           Priority-based assessment
                         </span>
+
                       </div>
 
                     </div>
 
 
-                    {/* =======================================
+                    {/* =====================================
                         AI ANALYSIS
-                    ======================================= */}
+                    ===================================== */}
 
                     {item.analysis && (
                       <div style={styles.contentSection}>
 
-                        <h4 style={styles.contentTitle}>
-                          AI Analysis
-                        </h4>
+                        <div style={styles.contentHeadingRow}>
+
+                          <h4 style={styles.contentTitle}>
+                            AI Analysis
+                          </h4>
+
+                          {item.ai_generated && (
+                            <span style={styles.aiMiniBadge}>
+                              AI
+                            </span>
+                          )}
+
+                        </div>
 
                         <p style={styles.contentText}>
                           {item.analysis}
@@ -611,79 +778,98 @@ function SkillIntelligencePage() {
                     )}
 
 
-                    {/* =======================================
-                        STRENGTHS + WEAKNESSES
-                    ======================================= */}
+                    {/* =====================================
+                        STRENGTHS + DEVELOPMENT
+                    ===================================== */}
 
-                    <div style={styles.twoColumnGrid}>
+                    {(item.strengths?.length > 0 ||
+                      item.weaknesses?.length > 0) && (
 
-                      {item.strengths?.length > 0 && (
-                        <div style={styles.listSection}>
+                      <div style={styles.twoColumnGrid}>
 
-                          <h4 style={styles.contentTitle}>
-                            Strengths
-                          </h4>
+                        {item.strengths?.length > 0 && (
+                          <div style={styles.listSection}>
 
-                          <ul style={styles.list}>
-                            {item.strengths.map(
-                              (strength, index) => (
-                                <li
-                                  key={`${item.competency_id}-strength-${index}`}
-                                  style={styles.listItem}
-                                >
-                                  <span style={styles.listMarker}>
-                                    ✓
-                                  </span>
+                            <h4 style={styles.contentTitle}>
+                              Strengths
+                            </h4>
 
-                                  <span>
-                                    {strength}
-                                  </span>
-                                </li>
-                              )
-                            )}
-                          </ul>
+                            <ul style={styles.list}>
 
-                        </div>
-                      )}
+                              {item.strengths.map(
+                                (strength, index) => (
+                                  <li
+                                    key={`${item.competency_id}-strength-${index}`}
+                                    style={styles.listItem}
+                                  >
+                                    <span
+                                      style={{
+                                        ...styles.listMarker,
+                                        color: "#15803d",
+                                      }}
+                                    >
+                                      ✓
+                                    </span>
 
+                                    <span>
+                                      {strength}
+                                    </span>
+                                  </li>
+                                )
+                              )}
 
-                      {item.weaknesses?.length > 0 && (
-                        <div style={styles.listSection}>
+                            </ul>
 
-                          <h4 style={styles.contentTitle}>
-                            Development Areas
-                          </h4>
-
-                          <ul style={styles.list}>
-                            {item.weaknesses.map(
-                              (weakness, index) => (
-                                <li
-                                  key={`${item.competency_id}-weakness-${index}`}
-                                  style={styles.listItem}
-                                >
-                                  <span style={styles.listMarker}>
-                                    →
-                                  </span>
-
-                                  <span>
-                                    {weakness}
-                                  </span>
-                                </li>
-                              )
-                            )}
-                          </ul>
-
-                        </div>
-                      )}
-
-                    </div>
+                          </div>
+                        )}
 
 
-                    {/* =======================================
+                        {item.weaknesses?.length > 0 && (
+                          <div style={styles.listSection}>
+
+                            <h4 style={styles.contentTitle}>
+                              Development Areas
+                            </h4>
+
+                            <ul style={styles.list}>
+
+                              {item.weaknesses.map(
+                                (weakness, index) => (
+                                  <li
+                                    key={`${item.competency_id}-weakness-${index}`}
+                                    style={styles.listItem}
+                                  >
+                                    <span
+                                      style={{
+                                        ...styles.listMarker,
+                                        color: "#c2410c",
+                                      }}
+                                    >
+                                      →
+                                    </span>
+
+                                    <span>
+                                      {weakness}
+                                    </span>
+                                  </li>
+                                )
+                              )}
+
+                            </ul>
+
+                          </div>
+                        )}
+
+                      </div>
+                    )}
+
+
+                    {/* =====================================
                         RECOMMENDED FOCUS
-                    ======================================= */}
+                    ===================================== */}
 
                     {item.recommended_focus?.length > 0 && (
+
                       <div style={styles.focusSection}>
 
                         <h4 style={styles.contentTitle}>
@@ -698,7 +884,9 @@ function SkillIntelligencePage() {
                                 key={`${item.competency_id}-focus-${index}`}
                                 style={styles.focusItem}
                               >
-                                <span style={styles.focusNumber}>
+                                <span
+                                  style={styles.focusNumber}
+                                >
                                   {index + 1}
                                 </span>
 
@@ -715,69 +903,105 @@ function SkillIntelligencePage() {
                     )}
 
 
-                    {/* =======================================
+                    {/* =====================================
                         ASSESSMENT PERFORMANCE
-                    ======================================= */}
+                    ===================================== */}
 
                     {item.assessment_performance && (
+
                       <div style={styles.performanceSection}>
 
-                        <h4 style={styles.contentTitle}>
-                          Assessment Performance
-                        </h4>
+                        <div style={styles.contentHeadingRow}>
+
+                          <h4 style={styles.contentTitle}>
+                            Assessment Performance
+                          </h4>
+
+                          <span
+                            style={styles.performanceBadge}
+                          >
+                            Evidence
+                          </span>
+
+                        </div>
 
                         <div style={styles.performanceGrid}>
 
-                          <div>
-                            <span style={styles.performanceLabel}>
+                          <div style={styles.performanceItem}>
+
+                            <span
+                              style={styles.performanceLabel}
+                            >
                               Attempts
                             </span>
 
-                            <strong style={styles.performanceValue}>
+                            <strong
+                              style={styles.performanceValue}
+                            >
                               {item.assessment_performance.attempts}
                             </strong>
+
                           </div>
 
 
-                          <div>
-                            <span style={styles.performanceLabel}>
+                          <div style={styles.performanceItem}>
+
+                            <span
+                              style={styles.performanceLabel}
+                            >
                               Latest Score
                             </span>
 
-                            <strong style={styles.performanceValue}>
+                            <strong
+                              style={styles.performanceValue}
+                            >
                               {formatPercentage(
                                 item.assessment_performance
                                   .latest_percentage
                               ) || "No attempt"}
                             </strong>
+
                           </div>
 
 
-                          <div>
-                            <span style={styles.performanceLabel}>
+                          <div style={styles.performanceItem}>
+
+                            <span
+                              style={styles.performanceLabel}
+                            >
                               Best Score
                             </span>
 
-                            <strong style={styles.performanceValue}>
+                            <strong
+                              style={styles.performanceValue}
+                            >
                               {formatPercentage(
                                 item.assessment_performance
                                   .best_percentage
                               ) || "No attempt"}
                             </strong>
+
                           </div>
 
 
-                          <div>
-                            <span style={styles.performanceLabel}>
+                          <div style={styles.performanceItem}>
+
+                            <span
+                              style={styles.performanceLabel}
+                            >
                               Competency Accuracy
                             </span>
 
-                            <strong style={styles.performanceValue}>
+                            <strong
+                              style={styles.performanceValue}
+                            >
                               {formatPercentage(
                                 item.assessment_performance
                                   .competency_accuracy
-                              ) || "No competency-specific attempt"}
+                              ) ||
+                                "No competency-specific attempt"}
                             </strong>
+
                           </div>
 
                         </div>
@@ -786,17 +1010,19 @@ function SkillIntelligencePage() {
                     )}
 
 
-                    {/* =======================================
-                        AI LABEL
-                    ======================================= */}
+                    {/* =====================================
+                        AI FOOTER
+                    ===================================== */}
 
                     {item.ai_generated && (
                       <div style={styles.aiFooter}>
+
                         <span style={styles.aiDot} />
 
                         <span>
                           Gemini-assisted interpretation
                         </span>
+
                       </div>
                     )}
 
@@ -805,6 +1031,7 @@ function SkillIntelligencePage() {
               })}
 
             </div>
+
           </section>
 
 
@@ -815,7 +1042,12 @@ function SkillIntelligencePage() {
           <section style={styles.recommendationSection}>
 
             <div style={styles.sectionHeader}>
+
               <div>
+                <div style={styles.sectionEyebrow}>
+                  PERSONALIZED LEARNING
+                </div>
+
                 <h2 style={styles.sectionTitle}>
                   Recommended Learning
                 </h2>
@@ -825,64 +1057,103 @@ function SkillIntelligencePage() {
                   to your identified skill gaps.
                 </p>
               </div>
+
+              {recommendations.length > 0 && (
+                <div style={styles.sectionMeta}>
+                  {recommendations.length} matched
+                  {recommendations.length === 1
+                    ? " resource"
+                    : " resources"}
+                </div>
+              )}
+
             </div>
 
 
             {recommendations.length === 0 ? (
+
               <div style={styles.noRecommendationCard}>
 
-                <h3 style={styles.noRecommendationTitle}>
-                  No Learning Resources Matched
-                </h3>
+                <div style={styles.noRecommendationIcon}>
+                  i
+                </div>
 
-                <p style={styles.noRecommendationText}>
-                  No resource in the current prototype
-                  catalogue matched your identified skill
-                  gaps.
-                </p>
+                <div>
 
-                {recommendationNote && (
-                  <small style={styles.sourceNote}>
-                    {recommendationNote}
-                  </small>
-                )}
+                  <h3
+                    style={styles.noRecommendationTitle}
+                  >
+                    No Learning Resources Matched
+                  </h3>
+
+                  <p
+                    style={styles.noRecommendationText}
+                  >
+                    No resource in the current prototype
+                    catalogue matched your identified
+                    skill gaps.
+                  </p>
+
+                  {recommendationNote && (
+                    <small style={styles.sourceNote}>
+                      {recommendationNote}
+                    </small>
+                  )}
+
+                </div>
 
               </div>
+
             ) : (
+
               <>
+
                 <div style={styles.recommendationGrid}>
 
                   {recommendations.map(
                     (recommendation, index) => (
+
                       <article
                         key={`${recommendation.title}-${index}`}
                         style={styles.recommendationCard}
                       >
 
-                        <div style={styles.recommendationTop}>
+                        <div
+                          style={styles.recommendationTop}
+                        >
 
-                          <span style={styles.resourceBadge}>
-                            {recommendation.resource_type
-                              ?.replaceAll("_", " ")
-                              .toUpperCase() ||
-                              "LEARNING RESOURCE"}
+                          <span
+                            style={styles.resourceBadge}
+                          >
+                            {getRecommendationTypeLabel(
+                              recommendation.resource_type
+                            )}
                           </span>
 
-                          <span style={styles.resourceSource}>
+                          <span
+                            style={styles.resourceSource}
+                          >
                             {recommendation.source}
                           </span>
 
                         </div>
 
 
-                        <h3 style={styles.recommendationTitle}>
+                        <h3
+                          style={
+                            styles.recommendationTitle
+                          }
+                        >
                           {recommendation.title}
                         </h3>
 
 
                         {recommendation.competency_name && (
-                          <div style={styles.alignedSkill}>
+                          <div
+                            style={styles.alignedSkill}
+                          >
                             For competency:{" "}
+
                             <strong>
                               {recommendation.competency_name}
                             </strong>
@@ -890,7 +1161,11 @@ function SkillIntelligencePage() {
                         )}
 
 
-                        <p style={styles.recommendationReason}>
+                        <p
+                          style={
+                            styles.recommendationReason
+                          }
+                        >
                           {recommendation.reason}
                         </p>
 
@@ -901,13 +1176,17 @@ function SkillIntelligencePage() {
                           rel="noopener noreferrer"
                           style={styles.resourceButton}
                         >
-                          Open Learning Resource
+                          <span>
+                            Open Learning Resource
+                          </span>
+
                           <span>
                             ↗
                           </span>
                         </a>
 
                       </article>
+
                     )
                   )}
 
@@ -919,6 +1198,7 @@ function SkillIntelligencePage() {
                     {recommendationNote}
                   </p>
                 )}
+
               </>
             )}
 
@@ -933,6 +1213,7 @@ function SkillIntelligencePage() {
 
 
 const styles = {
+
   page: {
     width: "100%",
     maxWidth: "1280px",
@@ -947,6 +1228,10 @@ const styles = {
     alignItems: "flex-start",
     gap: "1.5rem",
     marginBottom: "1.5rem",
+  },
+
+  headerContent: {
+    minWidth: 0,
   },
 
   eyebrow: {
@@ -986,9 +1271,19 @@ const styles = {
     display: "flex",
     alignItems: "flex-start",
     gap: "0.75rem",
-    borderRadius: "10px",
-    padding: "1rem",
+    borderRadius: "12px",
+    padding: "1rem 1.1rem",
     marginBottom: "1.5rem",
+  },
+
+  statusBannerAi: {
+    background: "#ecfdf5",
+    border: "1px solid #a7f3d0",
+  },
+
+  statusBannerFallback: {
+    background: "#f8fafc",
+    border: "1px solid #e2e8f0",
   },
 
   statusDot: {
@@ -997,6 +1292,11 @@ const styles = {
     borderRadius: "50%",
     marginTop: "0.35rem",
     flexShrink: 0,
+  },
+
+  statusContent: {
+    flex: 1,
+    minWidth: 0,
   },
 
   statusTitle: {
@@ -1012,6 +1312,19 @@ const styles = {
     fontSize: "0.9rem",
   },
 
+  statusBadge: {
+    display: "inline-flex",
+    alignItems: "center",
+    padding: "0.3rem 0.55rem",
+    borderRadius: "999px",
+    background: "#ffffff",
+    color: "#475569",
+    border: "1px solid #cbd5e1",
+    fontSize: "0.65rem",
+    fontWeight: 800,
+    whiteSpace: "nowrap",
+  },
+
   summaryGrid: {
     display: "grid",
     gridTemplateColumns:
@@ -1021,12 +1334,29 @@ const styles = {
   },
 
   summaryCard: {
+    position: "relative",
     background: "#ffffff",
     border: "1px solid #e2e8f0",
     borderRadius: "12px",
     padding: "1.1rem",
     boxShadow:
       "0 2px 8px rgba(15, 23, 42, 0.04)",
+    overflow: "hidden",
+  },
+
+  summaryIcon: {
+    position: "absolute",
+    top: "0.85rem",
+    right: "1rem",
+    width: "28px",
+    height: "28px",
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: "8px",
+    background: "#eff6ff",
+    color: "#2563eb",
+    fontWeight: 800,
   },
 
   summaryLabel: {
@@ -1052,7 +1382,19 @@ const styles = {
   },
 
   sectionHeader: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "flex-end",
+    gap: "1rem",
     marginBottom: "1rem",
+  },
+
+  sectionEyebrow: {
+    fontSize: "0.68rem",
+    fontWeight: 800,
+    letterSpacing: "0.07em",
+    color: "#64748b",
+    marginBottom: "0.25rem",
   },
 
   sectionTitle: {
@@ -1065,6 +1407,13 @@ const styles = {
     margin: "0.35rem 0 0",
     color: "#64748b",
     lineHeight: 1.5,
+  },
+
+  sectionMeta: {
+    color: "#64748b",
+    fontSize: "0.78rem",
+    fontWeight: 700,
+    whiteSpace: "nowrap",
   },
 
   skillList: {
@@ -1087,6 +1436,10 @@ const styles = {
     alignItems: "flex-start",
     gap: "1rem",
     marginBottom: "1.25rem",
+  },
+
+  skillHeaderMain: {
+    minWidth: 0,
   },
 
   skillNameRow: {
@@ -1112,11 +1465,22 @@ const styles = {
     fontWeight: 700,
   },
 
-  statusTextBadge: {
-    display: "inline-block",
+  skillSubRow: {
+    display: "flex",
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: "0.65rem",
     marginTop: "0.4rem",
+  },
+
+  statusTextBadge: {
     color: "#64748b",
     fontSize: "0.78rem",
+  },
+
+  gapDescription: {
+    color: "#94a3b8",
+    fontSize: "0.75rem",
   },
 
   priorityBadge: {
@@ -1144,19 +1508,35 @@ const styles = {
     background: "#f8fafc",
   },
 
+  metricTop: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: "0.5rem",
+    marginBottom: "0.5rem",
+  },
+
   metricLabel: {
     display: "block",
     color: "#64748b",
     fontSize: "0.75rem",
     fontWeight: 700,
-    marginBottom: "0.35rem",
   },
 
   metricValue: {
-    display: "block",
     color: "#0f172a",
-    fontSize: "1.25rem",
-    marginBottom: "0.5rem",
+    fontSize: "1.05rem",
+  },
+
+  gapValue: {
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    minWidth: "34px",
+    padding: "0.25rem 0.55rem",
+    borderRadius: "7px",
+    fontSize: "1.15rem",
+    fontWeight: 800,
   },
 
   metricHint: {
@@ -1184,6 +1564,7 @@ const styles = {
     height: "100%",
     background: "#2563eb",
     borderRadius: "999px",
+    transition: "width 0.4s ease",
   },
 
   progressRequired: {
@@ -1198,8 +1579,15 @@ const styles = {
     marginTop: "0.5rem",
   },
 
+  contentHeadingRow: {
+    display: "flex",
+    alignItems: "center",
+    gap: "0.5rem",
+    marginBottom: "0.55rem",
+  },
+
   contentTitle: {
-    margin: "0 0 0.55rem",
+    margin: 0,
     color: "#0f172a",
     fontSize: "0.95rem",
   },
@@ -1209,6 +1597,17 @@ const styles = {
     color: "#475569",
     lineHeight: 1.65,
     fontSize: "0.9rem",
+  },
+
+  aiMiniBadge: {
+    display: "inline-flex",
+    padding: "0.2rem 0.4rem",
+    borderRadius: "5px",
+    background: "#ecfdf5",
+    color: "#047857",
+    border: "1px solid #a7f3d0",
+    fontSize: "0.6rem",
+    fontWeight: 800,
   },
 
   twoColumnGrid: {
@@ -1245,7 +1644,6 @@ const styles = {
   listMarker: {
     flexShrink: 0,
     fontWeight: 800,
-    color: "#2563eb",
   },
 
   focusSection: {
@@ -1291,11 +1689,28 @@ const styles = {
     paddingTop: "1rem",
   },
 
+  performanceBadge: {
+    display: "inline-flex",
+    padding: "0.2rem 0.45rem",
+    borderRadius: "5px",
+    background: "#f1f5f9",
+    color: "#64748b",
+    fontSize: "0.62rem",
+    fontWeight: 800,
+  },
+
   performanceGrid: {
     display: "grid",
     gridTemplateColumns:
       "repeat(auto-fit, minmax(150px, 1fr))",
     gap: "0.7rem",
+  },
+
+  performanceItem: {
+    padding: "0.7rem",
+    borderRadius: "8px",
+    background: "#f8fafc",
+    border: "1px solid #e2e8f0",
   },
 
   performanceLabel: {
@@ -1419,10 +1834,26 @@ const styles = {
   },
 
   noRecommendationCard: {
+    display: "flex",
+    alignItems: "flex-start",
+    gap: "0.8rem",
     background: "#ffffff",
     border: "1px solid #e2e8f0",
     borderRadius: "12px",
     padding: "1.25rem",
+  },
+
+  noRecommendationIcon: {
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    width: "34px",
+    height: "34px",
+    borderRadius: "8px",
+    background: "#f1f5f9",
+    color: "#64748b",
+    fontWeight: 800,
+    flexShrink: 0,
   },
 
   noRecommendationTitle: {
@@ -1466,7 +1897,7 @@ const styles = {
   },
 
   emptyText: {
-    margin: "0.5rem auto 0",
+    margin: "0.5rem auto 1.2rem",
     maxWidth: "500px",
     color: "#64748b",
     lineHeight: 1.5,
@@ -1547,14 +1978,6 @@ const styles = {
     borderRadius: "8px",
     fontWeight: 700,
     cursor: "pointer",
-  },
-
-  page: {
-    width: "100%",
-    maxWidth: "1280px",
-    margin: "0 auto",
-    boxSizing: "border-box",
-    paddingBottom: "3rem",
   },
 };
 

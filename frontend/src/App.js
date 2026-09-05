@@ -21,6 +21,7 @@ import TrainerAssessmentsPage from "./pages/TrainerAssessmentsPage";
 import TrainerAssignmentsPage from "./pages/TrainerAssignmentsPage";
 import TrainerDashboardPage from "./pages/TrainerDashboardPage";
 import TrainerModulesPage from "./pages/TrainerModulesPage";
+import TrainerQuizGeneratorPage from "./pages/TrainerQuizGeneratorPage";
 
 import TesterAssignmentsPage from "./pages/TesterAssignmentsPage";
 
@@ -146,6 +147,7 @@ function App() {
             }
           />
 
+
           {/* =================================================
               AI SKILL INTELLIGENCE
           ================================================= */}
@@ -206,6 +208,21 @@ function App() {
                 allowedRoles={["trainer"]}
               >
                 <TrainerAssignmentsPage />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* =================================================
+              AI QUIZ GENERATOR
+          ================================================= */}
+
+          <Route
+            path="/trainer/quiz-generator"
+            element={
+              <ProtectedRoute
+                allowedRoles={["trainer"]}
+              >
+                <TrainerQuizGeneratorPage />
               </ProtectedRoute>
             }
           />
@@ -293,7 +310,8 @@ function App() {
 
 export const healthCheck = async () => {
   try {
-    const response = await authApi.healthCheck();
+    const response =
+      await authApi.healthCheck();
 
     return response;
 

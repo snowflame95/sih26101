@@ -47,10 +47,7 @@ const assessmentApi = {
   },
 
 
-  submitAssessment(
-    assessmentId,
-    payload
-  ) {
+  submitAssessment(assessmentId, payload) {
     return apiClient.post(
       `/api/assessments/${assessmentId}/submit`,
       payload,
@@ -62,7 +59,7 @@ const assessmentApi = {
 
 
   // ==========================================================
-  // TRAINER / CONTENT MANAGER
+  // TRAINER / CONTENT MANAGEMENT
   // ==========================================================
 
   listManageAssessments() {
@@ -75,9 +72,7 @@ const assessmentApi = {
   },
 
 
-  getManageAssessment(
-    assessmentId
-  ) {
+  getManageAssessment(assessmentId) {
     return apiClient.get(
       `/api/assessments/manage/${assessmentId}`,
       {
@@ -87,9 +82,7 @@ const assessmentApi = {
   },
 
 
-  createAssessment(
-    payload
-  ) {
+  createAssessment(payload) {
     return apiClient.post(
       "/api/assessments/",
       payload,
@@ -100,10 +93,7 @@ const assessmentApi = {
   },
 
 
-  updateAssessment(
-    assessmentId,
-    payload
-  ) {
+  updateAssessment(assessmentId, payload) {
     return apiClient.put(
       `/api/assessments/manage/${assessmentId}`,
       payload,
@@ -114,9 +104,7 @@ const assessmentApi = {
   },
 
 
-  deleteAssessment(
-    assessmentId
-  ) {
+  deleteAssessment(assessmentId) {
     return apiClient.delete(
       `/api/assessments/manage/${assessmentId}`,
       {
@@ -126,10 +114,7 @@ const assessmentApi = {
   },
 
 
-  addQuestion(
-    assessmentId,
-    payload
-  ) {
+  addQuestion(assessmentId, payload) {
     return apiClient.post(
       `/api/assessments/manage/${assessmentId}/questions`,
       payload,
@@ -144,9 +129,7 @@ const assessmentApi = {
   // ASSESSMENT ASSIGNMENTS
   // ==========================================================
 
-  createAssignment(
-    payload
-  ) {
+  createAssignment(payload) {
     return apiClient.post(
       "/api/assessments/assignments",
       payload,
@@ -177,9 +160,7 @@ const assessmentApi = {
   },
 
 
-  getAssignment(
-    assignmentId
-  ) {
+  getAssignment(assignmentId) {
     return apiClient.get(
       `/api/assessments/assignments/${assignmentId}`,
       {
@@ -189,10 +170,7 @@ const assessmentApi = {
   },
 
 
-  reviewAssignment(
-    assignmentId,
-    payload
-  ) {
+  reviewAssignment(assignmentId, payload) {
     return apiClient.post(
       `/api/assessments/assignments/${assignmentId}/review`,
       payload,
@@ -206,30 +184,23 @@ const assessmentApi = {
   // ==========================================================
   // AI QUIZ GENERATION
   // ==========================================================
-  //
-  // These methods will be connected after the backend
-  // AI quiz-generation endpoint is implemented.
-  //
-  // The AI generator will NOT replace the existing
-  // assessment system.
-  //
-  // Flow:
-  //
-  // Trainer
-  //   ↓
-  // Upload document
-  //   ↓
-  // AI generates questions
-  //   ↓
-  // Preview / review
-  //   ↓
-  // Existing createAssessment()
-  //
-  // ==========================================================
 
-  generateQuiz(
-    formData
-  ) {
+  /**
+   * Sends a document to the backend AI quiz generator.
+   *
+   * Expected FormData:
+   *   file
+   *   question_count
+   *   difficulty
+   *   competency_name
+   *
+   * The backend returns a generated quiz preview.
+   *
+   * IMPORTANT:
+   * This does not directly create an assessment.
+   * The trainer reviews the generated questions first.
+   */
+  generateQuiz(formData) {
     return apiClient.post(
       "/api/ai/generate-quiz",
       formData,
@@ -240,9 +211,14 @@ const assessmentApi = {
   },
 
 
-  createGeneratedAssessment(
-    payload
-  ) {
+  /**
+   * Publishes an AI-generated quiz using the
+   * existing assessment system.
+   *
+   * This keeps AI generation and assessment storage
+   * separated while reusing the existing architecture.
+   */
+  createGeneratedAssessment(payload) {
     return apiClient.post(
       "/api/assessments/",
       payload,
