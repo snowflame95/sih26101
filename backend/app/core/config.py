@@ -15,6 +15,31 @@ class Settings(BaseSettings):
     # for creating trainer/admin accounts.
     SPECIAL_REGISTRATION_KEY: str
 
+    # ============================================================
+    # AI CONFIGURATION
+    # ============================================================
+
+    # Keep false while testing the deterministic fallback.
+    AI_ENABLED: bool = False
+
+    # Current AI provider.
+    AI_PROVIDER: str = "gemini"
+
+    # Gemini API key.
+    # NEVER expose this to the React frontend.
+    GEMINI_API_KEY: str | None = None
+
+    # Can be changed from .env without changing application code.
+    GEMINI_MODEL: str = "gemini-3.7-flash"
+
+    # ============================================================
+    # iGOT CONFIGURATION
+    # ============================================================
+
+    # This controls whether curated iGOT resources are available
+    # in the recommendation layer.
+    IGOT_ENABLED: bool = True
+
     model_config = SettingsConfigDict(
         env_file=".env",
         case_sensitive=True,

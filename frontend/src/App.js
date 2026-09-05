@@ -15,6 +15,7 @@ import LoginPage from "./pages/LoginPage";
 import ProfilePage from "./pages/ProfilePage";
 import RegisterPage from "./pages/RegisterPage";
 import RoadmapPage from "./pages/RoadmapPage";
+import SkillIntelligencePage from "./pages/SkillIntelligencePage";
 
 import TrainerAssessmentsPage from "./pages/TrainerAssessmentsPage";
 import TrainerAssignmentsPage from "./pages/TrainerAssignmentsPage";
@@ -60,7 +61,9 @@ function App() {
           }
         >
 
-          {/* COMMON */}
+          {/* =================================================
+              COMMON
+          ================================================= */}
 
           <Route
             path="/dashboard"
@@ -139,6 +142,21 @@ function App() {
                 allowedRoles={["learner"]}
               >
                 <RoadmapPage />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* =================================================
+              AI SKILL INTELLIGENCE
+          ================================================= */}
+
+          <Route
+            path="/skill-intelligence"
+            element={
+              <ProtectedRoute
+                allowedRoles={["learner"]}
+              >
+                <SkillIntelligencePage />
               </ProtectedRoute>
             }
           />
@@ -269,10 +287,13 @@ function App() {
 }
 
 
+/* =============================================================
+   BACKEND HEALTH CHECK
+============================================================= */
+
 export const healthCheck = async () => {
   try {
-    const response =
-      await authApi.healthCheck();
+    const response = await authApi.healthCheck();
 
     return response;
 
