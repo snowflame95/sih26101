@@ -26,9 +26,15 @@ class GeminiSkillAnalysisItem(BaseModel):
     competency_id: int
     competency_name: str
     analysis: str
-    strengths: list[str] = Field(default_factory=list)
-    weaknesses: list[str] = Field(default_factory=list)
-    recommended_focus: list[str] = Field(default_factory=list)
+    strengths: list[str] = Field(
+        default_factory=list
+    )
+    weaknesses: list[str] = Field(
+        default_factory=list
+    )
+    recommended_focus: list[str] = Field(
+        default_factory=list
+    )
 
 
 class GeminiSkillAnalysisResponse(BaseModel):
@@ -121,33 +127,33 @@ def _get_overall_assessment_performance(
             percentages.append(
                 float(percentage)
             )
+            continue
 
-        else:
-            score = getattr(
-                attempt,
-                "score",
-                None,
+        score = getattr(
+            attempt,
+            "score",
+            None,
+        )
+
+        total_questions = getattr(
+            attempt,
+            "total_questions",
+            None,
+        )
+
+        if (
+            score is not None
+            and total_questions
+            and total_questions > 0
+        ):
+            calculated_percentage = (
+                float(score)
+                / float(total_questions)
+            ) * 100
+
+            percentages.append(
+                calculated_percentage
             )
-
-            total_questions = getattr(
-                attempt,
-                "total_questions",
-                None,
-            )
-
-            if (
-                score is not None
-                and total_questions
-                and total_questions > 0
-            ):
-                calculated_percentage = (
-                    float(score)
-                    / float(total_questions)
-                ) * 100
-
-                percentages.append(
-                    calculated_percentage
-                )
 
     latest_percentage = (
         round(percentages[-1], 2)
@@ -180,19 +186,6 @@ def _get_competency_accuracy(
 ) -> float | None:
     """
     Calculate assessment accuracy for a particular competency.
-
-    Relationship:
-
-        AssessmentAttempt
-                ↓
-        AssessmentAnswer
-                ↓
-        AssessmentQuestion
-                ↓
-        competency_id
-
-    Calculation is intentionally done in Python to avoid
-    unnecessary SQL CAST complexity.
     """
 
     answers = db.scalars(
@@ -287,8 +280,11 @@ def _fallback_analysis(
     """
     Deterministic fallback when Gemini is unavailable.
 
-    This allows the Skill Intelligence API to remain functional
-    even when AI is disabled or the Gemini API fails.
+    This keeps Skill Intelligence functional even when:
+        - AI is disabled
+        - Gemini is unavailable
+        - Gemini request fails
+        - Gemini returns invalid structured output
     """
 
     gap = float(
@@ -570,6 +566,12 @@ def _run_gemini(
 ) -> dict[int, GeminiSkillAnalysisItem]:
     """
     Execute Gemini structured-output generation.
+
+    Raises an exception when Gemini cannot successfully
+    generate and validate the requested response.
+
+    The caller handles the exception and activates the
+    deterministic fallback.
     """
 
     if not settings.GEMINI_API_KEY:
@@ -578,12 +580,34 @@ def _run_gemini(
             "GEMINI_API_KEY is not configured."
         )
 
+    model_name = (
+        settings.GEMINI_MODEL.strip()
+    )
+
+    if not model_name:
+
+        raise RuntimeError(
+            "GEMINI_MODEL is empty."
+        )
+
+    print(
+        "[AI] Starting Gemini skill analysis..."
+    )
+
+    print(
+        f"[AI] Provider: {settings.AI_PROVIDER}"
+    )
+
+    print(
+        f"[AI] Model: {model_name}"
+    )
+
     client = genai.Client(
         api_key=settings.GEMINI_API_KEY
     )
 
     response = client.models.generate_content(
-        model=settings.GEMINI_MODEL,
+        model=model_name,
         contents=_build_ai_prompt(
             items
         ),
@@ -594,18 +618,49 @@ def _run_gemini(
         ),
     )
 
-    if not response.text:
+    if response is None:
+
+        raise RuntimeError(
+            "Gemini returned no response object."
+        )
+
+    response_text = getattr(
+        response,
+        "text",
+        None,
+    )
+
+    if not response_text:
 
         raise RuntimeError(
             "Gemini returned an empty response."
         )
 
-    parsed = (
-        GeminiSkillAnalysisResponse
-        .model_validate_json(
-            response.text
-        )
+    print(
+        "[AI] Gemini response received successfully."
     )
+
+    try:
+
+        parsed = (
+            GeminiSkillAnalysisResponse
+            .model_validate_json(
+                response_text
+            )
+        )
+
+    except Exception as exc:
+
+        raise RuntimeError(
+            "Gemini returned invalid structured "
+            f"output: {exc}"
+        ) from exc
+
+    if not parsed.items:
+
+        raise RuntimeError(
+            "Gemini returned an empty items list."
+        )
 
     return {
         item.competency_id: item
@@ -622,6 +677,7 @@ def analyse_user_skills(
     db: Session,
     user_id: int,
     competency_id: int | None = None,
+    use_ai: bool = True,
 ) -> list[dict[str, Any]]:
     """
     Main Skill Intelligence pipeline.
@@ -643,6 +699,10 @@ def analyse_user_skills(
         Gemini Interpretation
                 ↓
         Fallback if Gemini unavailable
+
+    use_ai:
+        True  -> Gemini is allowed.
+        False -> deterministic backend analysis only.
     """
 
     query = (
@@ -697,6 +757,7 @@ def analyse_user_skills(
             user_competency.required_level
         )
 
+        # Backend is authoritative for the skill gap.
         gap = max(
             0.0,
             required_level
@@ -736,10 +797,56 @@ def analyse_user_skills(
         )
 
     if not items:
+
         return []
 
     # --------------------------------------------------------
-    # Gemini
+    # Determine whether Gemini should be used
+    # --------------------------------------------------------
+
+    ai_enabled = (
+        use_ai
+        and settings.AI_ENABLED
+        and settings.AI_PROVIDER.lower()
+        == "gemini"
+        and bool(settings.GEMINI_API_KEY)
+    )
+
+    print(
+        "[AI] --------------------------------------------------"
+    )
+
+    print(
+        f"[AI] use_ai={use_ai}"
+    )
+
+    print(
+        f"[AI] AI_ENABLED={settings.AI_ENABLED}"
+    )
+
+    print(
+        f"[AI] AI_PROVIDER={settings.AI_PROVIDER}"
+    )
+
+    print(
+        f"[AI] GEMINI_MODEL={settings.GEMINI_MODEL}"
+    )
+
+    print(
+        f"[AI] GEMINI_API_KEY_SET="
+        f"{bool(settings.GEMINI_API_KEY)}"
+    )
+
+    print(
+        f"[AI] Gemini execution enabled={ai_enabled}"
+    )
+
+    print(
+        "[AI] --------------------------------------------------"
+    )
+
+    # --------------------------------------------------------
+    # Gemini execution
     # --------------------------------------------------------
 
     ai_results: dict[
@@ -747,14 +854,7 @@ def analyse_user_skills(
         GeminiSkillAnalysisItem
     ] = {}
 
-    ai_available = (
-        settings.AI_ENABLED
-        and settings.AI_PROVIDER.lower()
-        == "gemini"
-        and bool(settings.GEMINI_API_KEY)
-    )
-
-    if ai_available:
+    if ai_enabled:
 
         try:
 
@@ -762,16 +862,44 @@ def analyse_user_skills(
                 items
             )
 
+            print(
+                "[AI] Gemini skill analysis completed."
+            )
+
         except Exception as exc:
 
-            # Gemini failure should NOT break
-            # the entire Skill Intelligence endpoint.
+            print(
+                "[AI] =================================================="
+            )
 
             print(
-                f"[AI] Gemini skill analysis failed: {exc}"
+                "[AI] GEMINI REQUEST FAILED"
+            )
+
+            print(
+                f"[AI] Error type: {type(exc).__name__}"
+            )
+
+            print(
+                f"[AI] Error: {exc}"
+            )
+
+            print(
+                "[AI] Falling back to deterministic analysis."
+            )
+
+            print(
+                "[AI] =================================================="
             )
 
             ai_results = {}
+
+    elif use_ai:
+
+        print(
+            "[AI] Gemini was requested but configuration "
+            "does not allow AI execution."
+        )
 
     # --------------------------------------------------------
     # Combine backend facts + AI interpretation

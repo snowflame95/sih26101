@@ -58,6 +58,7 @@ def skill_analysis(
         db=db,
         user_id=current_user.id,
         competency_id=request.competency_id,
+        use_ai=True,
     )
 
     # --------------------------------------------------------
@@ -92,13 +93,29 @@ def recommendations(
 ):
     """
     Generate learning recommendations based on
-    the learner's skill gaps.
+    the learner's current competency skill gaps.
+
+    Recommendation generation is deterministic and
+    uses the curated learning catalogue.
+
+    Gemini is intentionally disabled for this endpoint
+    because AI-generated interpretation is not required
+    for catalogue matching.
     """
+
+    # --------------------------------------------------------
+    # For recommendations, only authoritative competency
+    # and skill-gap data is required.
+    #
+    # use_ai=False prevents an unnecessary Gemini request
+    # and helps conserve API usage limits.
+    # --------------------------------------------------------
 
     items = analyse_user_skills(
         db=db,
         user_id=current_user.id,
         competency_id=request.competency_id,
+        use_ai=False,
     )
 
     recommendations = get_learning_recommendations(
