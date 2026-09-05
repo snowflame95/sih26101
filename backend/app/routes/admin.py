@@ -4,13 +4,20 @@ from sqlalchemy.orm import Session
 
 from app.core.security import require_role
 from app.db.database import get_db
+from app.db.models.activity import ActivityLog
 from app.db.models.assessment import (
     Assessment,
-    AssessmentAttempt,
     AssessmentAssignment,
+    AssessmentAttempt,
+)
+from app.db.models.learning import (
+    LearningModule,
+    LearningProgress,
+    LearningResource,
 )
 from app.db.models.profile import Profile
 from app.db.models.user import User
+from app.services.activity_service import get_activity_logs
 
 
 router = APIRouter(
@@ -82,10 +89,6 @@ def get_admin_overview(
         select(func.count(AssessmentAttempt.id))
     ) or 0
 
-    average_score = db.scalar(
-        select(func.avg(AssessmentAttempt.percentage))
-    )
-
     total_assignments = db.scalar(
         select(func.count(AssessmentAssignment.id))
     ) or 0
@@ -93,6 +96,20 @@ def get_admin_overview(
     completed_assignments = db.scalar(
         select(func.count(AssessmentAssignment.id)).where(
             AssessmentAssignment.status == "completed"
+        )
+    ) or 0
+
+    learning_modules = db.scalar(
+        select(func.count(LearningModule.id))
+    ) or 0
+
+    learning_resources = db.scalar(
+        select(func.count(LearningResource.id))
+    ) or 0
+
+    learning_completions = db.scalar(
+        select(func.count(LearningProgress.id)).where(
+            LearningProgress.status == "completed"
         )
     ) or 0
 
@@ -114,14 +131,15 @@ def get_admin_overview(
             "total": total_assessments,
             "active": active_assessments,
             "attempts": total_attempts,
-            "average_score": round(
-                float(average_score),
-                2,
-            ) if average_score is not None else 0.0,
         },
         "assignments": {
             "total": total_assignments,
             "completed": completed_assignments,
+        },
+        "learning": {
+            "modules": learning_modules,
+            "resources": learning_resources,
+            "completed": learning_completions,
         },
         "profiles": {
             "completed": profiles_completed,
@@ -193,6 +211,138 @@ def get_recent_users(
 
 
 # ============================================================
+# ADMIN USER STATUS
+# ============================================================
+
+@router.patch("/users/{user_id}/status")
+def update_user_status(
+    user_id: int,
+    is_active: bool,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role("admin")),
+):
+    if current_user.id == user_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Administrators cannot deactivate their own account",
+        )
+
+    user = db.get(User, user_id)
+
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found",
+        )
+
+    user.is_active = is_active
+
+    db.commit()
+    db.refresh(user)
+
+    action = (
+        "user_activated"
+        if is_active
+        else "user_deactivated"
+    )
+
+    description = (
+        f"Administrator changed user #{user.id} "
+        f"({user.email}) to "
+        f"{'active' if is_active else 'inactive'}."
+    )
+
+    try:
+        from app.services.activity_service import log_activity
+
+        log_activity(
+            db,
+            actor_user_id=current_user.id,
+            target_user_id=user.id,
+            action=action,
+            description=description,
+            entity_type="user",
+            entity_id=user.id,
+            details={
+                "is_active": is_active,
+            },
+        )
+    except Exception:
+        pass
+
+    return {
+        "id": user.id,
+        "email": user.email,
+        "role": user.role,
+        "is_active": user.is_active,
+    }
+
+
+# ============================================================
+# ASSESSMENT ATTEMPTS
+# ============================================================
+
+@router.get("/assessment-attempts")
+def get_assessment_attempts(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role("admin")),
+):
+    attempts = db.scalars(
+        select(AssessmentAttempt)
+        .order_by(
+            AssessmentAttempt.completed_at.desc()
+        )
+    ).all()
+
+    result = []
+
+    for attempt in attempts:
+        learner = db.get(
+            User,
+            attempt.user_id,
+        )
+
+        assessment = db.get(
+            Assessment,
+            attempt.assessment_id,
+        )
+
+        previous_attempt_count = db.scalar(
+            select(func.count(AssessmentAttempt.id)).where(
+                AssessmentAttempt.user_id == attempt.user_id,
+                AssessmentAttempt.assessment_id
+                == attempt.assessment_id,
+                AssessmentAttempt.id < attempt.id,
+            )
+        ) or 0
+
+        result.append(
+            {
+                "attempt_id": attempt.id,
+                "attempt_number": previous_attempt_count + 1,
+                "learner_id": attempt.user_id,
+                "learner_email": (
+                    learner.email
+                    if learner
+                    else "Unknown"
+                ),
+                "assessment_id": attempt.assessment_id,
+                "assessment_title": (
+                    assessment.title
+                    if assessment
+                    else "Unknown"
+                ),
+                "score": attempt.score,
+                "total_questions": attempt.total_questions,
+                "percentage": attempt.percentage,
+                "completed_at": attempt.completed_at,
+            }
+        )
+
+    return result
+
+
+# ============================================================
 # ASSESSMENT SUMMARY
 # ============================================================
 
@@ -209,18 +359,32 @@ def get_assessment_summary(
     result = []
 
     for assessment in assessments:
-        attempt_count = db.scalar(
-            select(func.count(AssessmentAttempt.id)).where(
-                AssessmentAttempt.assessment_id
-                == assessment.id
-            )
-        ) or 0
+        attempts = list(
+            db.scalars(
+                select(AssessmentAttempt)
+                .where(
+                    AssessmentAttempt.assessment_id
+                    == assessment.id
+                )
+                .order_by(
+                    AssessmentAttempt.completed_at.desc()
+                )
+            ).all()
+        )
 
-        average_score = db.scalar(
-            select(func.avg(AssessmentAttempt.percentage)).where(
-                AssessmentAttempt.assessment_id
-                == assessment.id
+        latest_attempt = (
+            attempts[0]
+            if attempts
+            else None
+        )
+
+        best_attempt = (
+            max(
+                attempts,
+                key=lambda item: item.percentage,
             )
+            if attempts
+            else None
         )
 
         result.append(
@@ -233,12 +397,207 @@ def get_assessment_summary(
                 "question_count": len(
                     assessment.questions
                 ),
-                "attempt_count": attempt_count,
-                "average_score": (
-                    round(float(average_score), 2)
-                    if average_score is not None
-                    else 0.0
+                "attempt_count": len(attempts),
+                "latest_score": (
+                    latest_attempt.percentage
+                    if latest_attempt
+                    else None
                 ),
+                "best_score": (
+                    best_attempt.percentage
+                    if best_attempt
+                    else None
+                ),
+                "latest_attempt_at": (
+                    latest_attempt.completed_at
+                    if latest_attempt
+                    else None
+                ),
+            }
+        )
+
+    return result
+
+
+# ============================================================
+# ASSIGNMENT ACTIVITY
+# ============================================================
+
+@router.get("/assignments")
+def get_admin_assignments(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role("admin")),
+):
+    assignments = db.scalars(
+        select(AssessmentAssignment)
+        .order_by(
+            AssessmentAssignment.assigned_at.desc()
+        )
+    ).all()
+
+    result = []
+
+    for assignment in assignments:
+        assessment = db.get(
+            Assessment,
+            assignment.assessment_id,
+        )
+
+        learner = db.get(
+            User,
+            assignment.learner_id,
+        )
+
+        trainer = db.get(
+            User,
+            assignment.assigned_by,
+        )
+
+        result.append(
+            {
+                "id": assignment.id,
+                "assessment_id": assignment.assessment_id,
+                "assessment_title": (
+                    assessment.title
+                    if assessment
+                    else "Unknown"
+                ),
+                "learner_id": assignment.learner_id,
+                "learner_email": (
+                    learner.email
+                    if learner
+                    else "Unknown"
+                ),
+                "assigned_by": assignment.assigned_by,
+                "trainer_email": (
+                    trainer.email
+                    if trainer
+                    else "Unknown"
+                ),
+                "status": assignment.status,
+                "assigned_at": assignment.assigned_at,
+                "due_at": assignment.due_at,
+                "completed_at": assignment.completed_at,
+                "feedback": assignment.feedback,
+            }
+        )
+
+    return result
+
+
+# ============================================================
+# LEARNING ACTIVITY
+# ============================================================
+
+@router.get("/learning")
+def get_admin_learning_activity(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role("admin")),
+):
+    progress_items = db.scalars(
+        select(LearningProgress)
+        .order_by(
+            LearningProgress.started_at.desc()
+        )
+    ).all()
+
+    result = []
+
+    for progress in progress_items:
+        learner = db.get(
+            User,
+            progress.user_id,
+        )
+
+        module = db.get(
+            LearningModule,
+            progress.learning_module_id,
+        )
+
+        result.append(
+            {
+                "id": progress.id,
+                "learner_id": progress.user_id,
+                "learner_email": (
+                    learner.email
+                    if learner
+                    else "Unknown"
+                ),
+                "module_id": progress.learning_module_id,
+                "module_title": (
+                    module.title
+                    if module
+                    else "Unknown"
+                ),
+                "status": progress.status,
+                "progress_percentage": (
+                    progress.progress_percentage
+                ),
+                "started_at": progress.started_at,
+                "completed_at": progress.completed_at,
+            }
+        )
+
+    return result
+
+
+# ============================================================
+# ACTIVITY TIMELINE
+# ============================================================
+
+@router.get("/activity")
+def get_admin_activity(
+    limit: int = 100,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_role("admin")),
+):
+    logs = get_activity_logs(
+        db,
+        limit,
+    )
+
+    result = []
+
+    for log in logs:
+        actor = (
+            db.get(
+                User,
+                log.actor_user_id,
+            )
+            if log.actor_user_id
+            else None
+        )
+
+        target = (
+            db.get(
+                User,
+                log.target_user_id,
+            )
+            if log.target_user_id
+            else None
+        )
+
+        result.append(
+            {
+                "id": log.id,
+                "action": log.action,
+                "description": log.description,
+                "entity_type": log.entity_type,
+                "entity_id": log.entity_id,
+                "actor_user_id": log.actor_user_id,
+                "actor_email": (
+                    actor.email
+                    if actor
+                    else None
+                ),
+                "target_user_id": log.target_user_id,
+                "target_email": (
+                    target.email
+                    if target
+                    else None
+                ),
+                "details": log.details,
+                "created_at": log.created_at,
             }
         )
 

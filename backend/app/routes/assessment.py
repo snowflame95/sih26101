@@ -30,6 +30,7 @@ from app.schemas.assessment import (
     AssessmentSubmitRequest,
     AssessmentUpdate,
 )
+from app.services.activity_service import log_activity
 from app.services.assessment_service import (
     create_assessment,
     add_assessment_question,
@@ -60,9 +61,9 @@ router = APIRouter(
 )
 
 
-# ---------------------------------------------------------
+# ============================================================
 # LIST AVAILABLE ASSESSMENTS
-# ---------------------------------------------------------
+# ============================================================
 
 @router.get(
     "",
@@ -74,6 +75,10 @@ def list_assessments(
 ):
     return get_all_active_assessments(db)
 
+
+# ============================================================
+# ASSIGN ASSESSMENT
+# ============================================================
 
 @router.post(
     "/assignments",
@@ -94,6 +99,29 @@ def assign_assessment(
             assignment_data,
         )
 
+        # ----------------------------------------------------
+        # Record assessment assignment.
+        # ----------------------------------------------------
+
+        log_activity(
+            db,
+            actor_user_id=current_user.id,
+            target_user_id=assignment.learner_id,
+            action="assessment_assigned",
+            description=(
+                f"{current_user.email} assigned "
+                f"assessment #{assignment.assessment_id} "
+                f"to learner #{assignment.learner_id}."
+            ),
+            entity_type="assessment_assignment",
+            entity_id=assignment.id,
+            details={
+                "assessment_id": assignment.assessment_id,
+                "learner_id": assignment.learner_id,
+                "assigned_by": current_user.id,
+            },
+        )
+
         return get_assignment_response(
             db,
             assignment,
@@ -102,7 +130,8 @@ def assign_assessment(
     except ValueError as exc:
         code = (
             status.HTTP_409_CONFLICT
-            if "already assigned" in str(exc).lower()
+            if "already assigned"
+            in str(exc).lower()
             else status.HTTP_404_NOT_FOUND
         )
 
@@ -111,6 +140,10 @@ def assign_assessment(
             detail=str(exc),
         ) from exc
 
+
+# ============================================================
+# LEARNER ASSIGNMENTS
+# ============================================================
 
 @router.get(
     "/assignments/my",
@@ -126,6 +159,10 @@ def list_my_assignments(
     )
 
 
+# ============================================================
+# REVIEW ASSIGNMENTS
+# ============================================================
+
 @router.get(
     "/assignments/assigned",
     response_model=list[AssessmentAssignmentResponse],
@@ -133,7 +170,10 @@ def list_my_assignments(
 def list_assigned_reviews(
     db: Session = Depends(get_db),
     current_user: User = Depends(
-        require_role("tester", *CONTENT_MANAGER_ROLES)
+        require_role(
+            "tester",
+            *CONTENT_MANAGER_ROLES,
+        )
     ),
 ):
     assignments = get_review_assignments(db)
@@ -141,17 +181,21 @@ def list_assigned_reviews(
     # Trainers should only see assessments that
     # they personally assigned to learners.
     #
-    # Testers and admins retain the broader review
-    # visibility provided by get_review_assignments().
+    # Testers and admins retain broader review visibility.
     if current_user.role == "trainer":
         assignments = [
             assignment
             for assignment in assignments
-            if assignment["assigned_by"] == current_user.id
+            if assignment["assigned_by"]
+            == current_user.id
         ]
 
     return assignments
 
+
+# ============================================================
+# GET SINGLE ASSIGNMENT
+# ============================================================
 
 @router.get(
     "/assignments/{assignment_id}",
@@ -178,6 +222,10 @@ def get_assignment(
     return assignment
 
 
+# ============================================================
+# REVIEW ASSIGNED ASSESSMENT
+# ============================================================
+
 @router.post(
     "/assignments/{assignment_id}/review",
     response_model=AssessmentAssignmentResponse,
@@ -191,11 +239,29 @@ def review_assigned_assessment(
     ),
 ):
     try:
-        return review_assignment(
+        result = review_assignment(
             db,
             assignment_id,
             feedback_data,
         )
+
+        log_activity(
+            db,
+            actor_user_id=current_user.id,
+            action="assessment_assignment_reviewed",
+            description=(
+                f"Tester {current_user.email} "
+                f"reviewed assessment assignment "
+                f"#{assignment_id}."
+            ),
+            entity_type="assessment_assignment",
+            entity_id=assignment_id,
+            details={
+                "status": "reviewed",
+            },
+        )
+
+        return result
 
     except ValueError as exc:
         raise HTTPException(
@@ -204,9 +270,9 @@ def review_assigned_assessment(
         ) from exc
 
 
-# ---------------------------------------------------------
+# ============================================================
 # CREATE ASSESSMENT
-# ---------------------------------------------------------
+# ============================================================
 
 @router.post(
     "/",
@@ -221,10 +287,34 @@ def create_new_assessment(
     ),
 ):
     try:
-        return create_assessment(
+        assessment = create_assessment(
             db,
             assessment_data,
         )
+
+        # ----------------------------------------------------
+        # Record who created the assessment.
+        # ----------------------------------------------------
+
+        log_activity(
+            db,
+            actor_user_id=current_user.id,
+            action="assessment_created",
+            description=(
+                f"{current_user.email} created "
+                f"assessment '{assessment.title}'."
+            ),
+            entity_type="assessment",
+            entity_id=assessment.id,
+            details={
+                "title": assessment.title,
+                "question_count": len(
+                    assessment_data.questions
+                ),
+            },
+        )
+
+        return assessment
 
     except ValueError as exc:
         raise HTTPException(
@@ -232,6 +322,10 @@ def create_new_assessment(
             detail=str(exc),
         ) from exc
 
+
+# ============================================================
+# AUTHORING RESPONSE HELPER
+# ============================================================
 
 def _authoring_response(assessment):
     return AssessmentAuthoringResponse(
@@ -255,6 +349,10 @@ def _authoring_response(assessment):
     )
 
 
+# ============================================================
+# LIST MANAGED ASSESSMENTS
+# ============================================================
+
 @router.get(
     "/manage",
     response_model=list[AssessmentAuthoringResponse],
@@ -267,7 +365,9 @@ def list_manage_assessments(
 ):
     assessments = (
         db.query(Assessment)
-        .order_by(Assessment.created_at.desc())
+        .order_by(
+            Assessment.created_at.desc()
+        )
         .all()
     )
 
@@ -276,6 +376,10 @@ def list_manage_assessments(
         for assessment in assessments
     ]
 
+
+# ============================================================
+# GET MANAGED ASSESSMENT
+# ============================================================
 
 @router.get(
     "/manage/{assessment_id}",
@@ -302,6 +406,10 @@ def get_manage_assessment_detail(
     return _authoring_response(assessment)
 
 
+# ============================================================
+# UPDATE ASSESSMENT
+# ============================================================
+
 @router.put(
     "/manage/{assessment_id}",
     response_model=AssessmentAuthoringResponse,
@@ -315,12 +423,26 @@ def edit_assessment(
     ),
 ):
     try:
+        assessment = update_assessment(
+            db,
+            assessment_id,
+            assessment_data,
+        )
+
+        log_activity(
+            db,
+            actor_user_id=current_user.id,
+            action="assessment_updated",
+            description=(
+                f"{current_user.email} updated "
+                f"assessment '{assessment.title}'."
+            ),
+            entity_type="assessment",
+            entity_id=assessment.id,
+        )
+
         return _authoring_response(
-            update_assessment(
-                db,
-                assessment_id,
-                assessment_data,
-            )
+            assessment
         )
 
     except ValueError as exc:
@@ -329,6 +451,10 @@ def edit_assessment(
             detail=str(exc),
         ) from exc
 
+
+# ============================================================
+# DELETE ASSESSMENT
+# ============================================================
 
 @router.delete(
     "/manage/{assessment_id}",
@@ -347,10 +473,23 @@ def remove_assessment(
             assessment_id,
         )
 
+        log_activity(
+            db,
+            actor_user_id=current_user.id,
+            action="assessment_deleted",
+            description=(
+                f"{current_user.email} deleted "
+                f"assessment #{assessment_id}."
+            ),
+            entity_type="assessment",
+            entity_id=assessment_id,
+        )
+
     except ValueError as exc:
         code = (
             status.HTTP_409_CONFLICT
-            if "attempts" in str(exc).lower()
+            if "attempts"
+            in str(exc).lower()
             else status.HTTP_404_NOT_FOUND
         )
 
@@ -361,6 +500,10 @@ def remove_assessment(
 
     return None
 
+
+# ============================================================
+# ADD ASSESSMENT QUESTION
+# ============================================================
 
 @router.post(
     "/manage/{assessment_id}/questions",
@@ -376,18 +519,38 @@ def add_question(
     ),
 ):
     try:
-        return add_assessment_question(
+        question = add_assessment_question(
             db,
             assessment_id,
             question_data,
         )
 
+        log_activity(
+            db,
+            actor_user_id=current_user.id,
+            action="assessment_question_created",
+            description=(
+                f"{current_user.email} added a "
+                f"question to assessment "
+                f"#{assessment_id}."
+            ),
+            entity_type="assessment_question",
+            entity_id=question.id,
+            details={
+                "assessment_id": assessment_id,
+            },
+        )
+
+        return question
+
     except ValueError as exc:
         code = (
             status.HTTP_400_BAD_REQUEST
             if (
-                "answer" in str(exc).lower()
-                or "options" in str(exc).lower()
+                "answer"
+                in str(exc).lower()
+                or "options"
+                in str(exc).lower()
             )
             else status.HTTP_404_NOT_FOUND
         )
@@ -397,6 +560,10 @@ def add_question(
             detail=str(exc),
         ) from exc
 
+
+# ============================================================
+# UPDATE ASSESSMENT QUESTION
+# ============================================================
 
 @router.put(
     "/manage/questions/{question_id}",
@@ -411,18 +578,35 @@ def edit_question(
     ),
 ):
     try:
-        return update_assessment_question(
+        question = update_assessment_question(
             db,
             question_id,
             question_data,
         )
 
+        log_activity(
+            db,
+            actor_user_id=current_user.id,
+            action="assessment_question_updated",
+            description=(
+                f"{current_user.email} updated "
+                f"assessment question "
+                f"#{question_id}."
+            ),
+            entity_type="assessment_question",
+            entity_id=question_id,
+        )
+
+        return question
+
     except ValueError as exc:
         code = (
             status.HTTP_400_BAD_REQUEST
             if (
-                "answer" in str(exc).lower()
-                or "options" in str(exc).lower()
+                "answer"
+                in str(exc).lower()
+                or "options"
+                in str(exc).lower()
             )
             else status.HTTP_404_NOT_FOUND
         )
@@ -432,6 +616,10 @@ def edit_question(
             detail=str(exc),
         ) from exc
 
+
+# ============================================================
+# DELETE ASSESSMENT QUESTION
+# ============================================================
 
 @router.delete(
     "/manage/questions/{question_id}",
@@ -450,10 +638,24 @@ def remove_question(
             question_id,
         )
 
+        log_activity(
+            db,
+            actor_user_id=current_user.id,
+            action="assessment_question_deleted",
+            description=(
+                f"{current_user.email} deleted "
+                f"assessment question "
+                f"#{question_id}."
+            ),
+            entity_type="assessment_question",
+            entity_id=question_id,
+        )
+
     except ValueError as exc:
         code = (
             status.HTTP_409_CONFLICT
-            if "answers" in str(exc).lower()
+            if "answers"
+            in str(exc).lower()
             else status.HTTP_404_NOT_FOUND
         )
 
@@ -465,9 +667,9 @@ def remove_question(
     return None
 
 
-# ---------------------------------------------------------
+# ============================================================
 # MY ATTEMPT HISTORY
-# ---------------------------------------------------------
+# ============================================================
 
 @router.get(
     "/my-attempts",
@@ -475,7 +677,9 @@ def remove_question(
 )
 def list_my_attempts(
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(
+        get_current_user
+    ),
 ):
     return get_user_attempts(
         db,
@@ -483,9 +687,9 @@ def list_my_attempts(
     )
 
 
-# ---------------------------------------------------------
+# ============================================================
 # GET SINGLE ATTEMPT / RESULT
-# ---------------------------------------------------------
+# ============================================================
 
 @router.get(
     "/attempts/{attempt_id}",
@@ -494,7 +698,9 @@ def list_my_attempts(
 def get_my_attempt(
     attempt_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(
+        get_current_user
+    ),
 ):
     attempt = get_attempt_by_id(
         db,
@@ -536,9 +742,9 @@ def get_my_attempt(
     )
 
 
-# ---------------------------------------------------------
+# ============================================================
 # GET SINGLE ASSESSMENT
-# ---------------------------------------------------------
+# ============================================================
 
 @router.get(
     "/{assessment_id}",
@@ -547,7 +753,9 @@ def get_my_attempt(
 def get_single_assessment(
     assessment_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(
+        get_current_user
+    ),
 ):
     assessment = get_assessment(
         db,
@@ -585,9 +793,9 @@ def get_single_assessment(
     )
 
 
-# ---------------------------------------------------------
+# ============================================================
 # SUBMIT ASSESSMENT
-# ---------------------------------------------------------
+# ============================================================
 
 @router.post(
     "/{assessment_id}/submit",
@@ -597,7 +805,9 @@ def submit_user_assessment(
     assessment_id: int,
     submission: AssessmentSubmitRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(
+        get_current_user
+    ),
 ):
     try:
         attempt = submit_assessment(
@@ -605,6 +815,34 @@ def submit_user_assessment(
             current_user.id,
             assessment_id,
             submission,
+        )
+
+        # ----------------------------------------------------
+        # Record individual assessment attempt.
+        # ----------------------------------------------------
+
+        log_activity(
+            db,
+            actor_user_id=current_user.id,
+            target_user_id=current_user.id,
+            action="assessment_completed",
+            description=(
+                f"Learner {current_user.email} "
+                f"completed assessment "
+                f"#{assessment_id} with "
+                f"{attempt.percentage}%."
+            ),
+            entity_type="assessment_attempt",
+            entity_id=attempt.id,
+            details={
+                "assessment_id": assessment_id,
+                "attempt_id": attempt.id,
+                "score": attempt.score,
+                "total_questions": (
+                    attempt.total_questions
+                ),
+                "percentage": attempt.percentage,
+            },
         )
 
         return AssessmentResultResponse(
@@ -632,9 +870,14 @@ def submit_user_assessment(
             ) from exc
 
         if (
-            message.startswith("Invalid question ID")
-            or message.startswith("Invalid answer option")
-            or message == "Duplicate question IDs are not allowed"
+            message.startswith(
+                "Invalid question ID"
+            )
+            or message.startswith(
+                "Invalid answer option"
+            )
+            or message
+            == "Duplicate question IDs are not allowed"
         ):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,

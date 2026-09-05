@@ -32,27 +32,61 @@ class LearningModuleCreate(BaseModel):
 
 class LearningModuleUpdate(BaseModel):
     competency_id: int | None = Field(default=None, gt=0)
-    title: str | None = Field(default=None, min_length=2, max_length=255)
+    title: str | None = Field(
+        default=None,
+        min_length=2,
+        max_length=255,
+    )
     description: str | None = None
-    difficulty: str | None = Field(default=None, min_length=2, max_length=20)
-    estimated_hours: int | None = Field(default=None, ge=1)
-    module_order: int | None = Field(default=None, ge=1)
+    difficulty: str | None = Field(
+        default=None,
+        min_length=2,
+        max_length=20,
+    )
+    estimated_hours: int | None = Field(
+        default=None,
+        ge=1,
+    )
+    module_order: int | None = Field(
+        default=None,
+        ge=1,
+    )
 
 
 class LearningResourceCreate(BaseModel):
     title: str = Field(..., min_length=2, max_length=255)
     description: str | None = None
-    resource_type: Literal["article", "video", "document", "external_link"]
+    resource_type: Literal[
+        "article",
+        "video",
+        "document",
+        "external_link",
+    ]
     resource_url: AnyHttpUrl
-    resource_order: int = Field(default=1, ge=1)
+    resource_order: int = Field(
+        default=1,
+        ge=1,
+    )
 
 
 class LearningResourceUpdate(BaseModel):
-    title: str | None = Field(default=None, min_length=2, max_length=255)
+    title: str | None = Field(
+        default=None,
+        min_length=2,
+        max_length=255,
+    )
     description: str | None = None
-    resource_type: Literal["article", "video", "document", "external_link"] | None = None
+    resource_type: Literal[
+        "article",
+        "video",
+        "document",
+        "external_link",
+    ] | None = None
     resource_url: AnyHttpUrl | None = None
-    resource_order: int | None = Field(default=None, ge=1)
+    resource_order: int | None = Field(
+        default=None,
+        ge=1,
+    )
 
 
 class LearningModuleResponse(BaseModel):

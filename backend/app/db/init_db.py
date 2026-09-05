@@ -18,6 +18,8 @@ from app.db.models.learning import (
     LearningResource,
 )
 
+from app.db.models.activity import ActivityLog
+
 
 def init_db():
     Base.metadata.create_all(bind=engine)

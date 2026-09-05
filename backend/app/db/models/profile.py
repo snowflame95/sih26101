@@ -1,5 +1,5 @@
 from sqlalchemy import ForeignKey, Integer, String, Text
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, mapped_column, relationship, backref
 
 from app.db.database import Base
 
@@ -53,5 +53,8 @@ class Profile(Base):
 
     user = relationship(
         "User",
-        backref="profile",
+        backref=backref(
+            "profile",
+            uselist=False,
+        ),
     )

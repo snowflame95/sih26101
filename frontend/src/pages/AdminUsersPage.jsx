@@ -9,7 +9,8 @@ export default function AdminUsersPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
-  const [updatingUserId, setUpdatingUserId] = useState(null);
+  const [updatingUserId, setUpdatingUserId] =
+    useState(null);
 
 
   const loadUsers = async () => {
@@ -18,7 +19,12 @@ export default function AdminUsersPage() {
 
     try {
       const data = await adminApi.getUsers();
-      setUsers(data);
+
+      setUsers(
+        Array.isArray(data)
+          ? data
+          : []
+      );
     } catch (err) {
       setError(
         err?.message ||
@@ -34,6 +40,10 @@ export default function AdminUsersPage() {
     loadUsers();
   }, []);
 
+
+  // ========================================================
+  // ROLE UPDATE
+  // ========================================================
 
   const handleRoleChange = async (
     userId,
@@ -65,21 +75,63 @@ export default function AdminUsersPage() {
   };
 
 
+  // ========================================================
+  // ACTIVE / INACTIVE STATUS
+  // ========================================================
+
+  const handleStatusChange = async (
+    userId,
+    isActive
+  ) => {
+    setMessage("");
+    setError("");
+    setUpdatingUserId(userId);
+
+    try {
+      await adminApi.updateUserStatus(
+        userId,
+        isActive
+      );
+
+      setMessage(
+        isActive
+          ? "User account activated successfully."
+          : "User account disabled successfully."
+      );
+
+      await loadUsers();
+    } catch (err) {
+      setError(
+        err?.message ||
+          "Unable to update user status."
+      );
+    } finally {
+      setUpdatingUserId(null);
+    }
+  };
+
+
   return (
     <div>
-      <h1>User Management</h1>
+      <h1>
+        User Management
+      </h1>
 
       <p style={styles.subtitle}>
-        View platform users and manage their roles.
+        View platform users and manage
+        their roles and access status.
       </p>
 
+
+      {/* ====================================================
+          FEEDBACK
+      ===================================================== */}
 
       {message && (
         <div style={styles.success}>
           {message}
         </div>
       )}
-
 
       {error && (
         <div style={styles.error}>
@@ -88,6 +140,10 @@ export default function AdminUsersPage() {
       )}
 
 
+      {/* ====================================================
+          PRIVILEGED ACCOUNT INFORMATION
+      ===================================================== */}
+
       <div style={styles.infoCard}>
         <strong>
           Privileged account provisioning
@@ -95,13 +151,22 @@ export default function AdminUsersPage() {
 
         <p style={styles.infoText}>
           New Trainer and Admin accounts are
-          provisioned through the protected backend
-          registration flow. The special registration
-          key is intentionally never exposed to the
-          frontend.
+          provisioned through the protected
+          backend registration flow. The special
+          registration key is intentionally never
+          exposed to the frontend.
+        </p>
+
+        <p style={styles.infoText}>
+          Administrators can manage existing user
+          roles and platform access from this page.
         </p>
       </div>
 
+
+      {/* ====================================================
+          USERS
+      ===================================================== */}
 
       <div style={styles.card}>
         <div style={styles.tableHeader}>
@@ -115,7 +180,9 @@ export default function AdminUsersPage() {
             disabled={isLoading}
             style={styles.refreshButton}
           >
-            Refresh
+            {isLoading
+              ? "Refreshing..."
+              : "Refresh"}
           </button>
         </div>
 
@@ -159,85 +226,211 @@ export default function AdminUsersPage() {
                 </tr>
               </thead>
 
+
               <tbody>
-                {users.map((item) => (
-                  <tr key={item.id}>
-                    <td style={styles.td}>
-                      {item.id}
-                    </td>
+                {users.map((item) => {
+                  const isUpdating =
+                    updatingUserId ===
+                    item.id;
 
-                    <td style={styles.td}>
-                      {item.email}
-                    </td>
+                  return (
+                    <tr key={item.id}>
+                      {/* ID */}
+                      <td style={styles.td}>
+                        {item.id}
+                      </td>
 
-                    <td style={styles.td}>
-                      <strong>
-                        {item.role}
-                      </strong>
-                    </td>
 
-                    <td style={styles.td}>
-                      {item.is_active
-                        ? "Active"
-                        : "Inactive"}
-                    </td>
+                      {/* EMAIL */}
+                      <td style={styles.td}>
+                        <strong>
+                          {item.email}
+                        </strong>
+                      </td>
 
-                    <td style={styles.td}>
-                      {item.profile ? (
-                        <div>
-                          <strong>
-                            {item.profile.full_name}
-                          </strong>
 
-                          <div style={styles.small}>
-                            {item.profile.designation}
-                          </div>
+                      {/* ROLE */}
+                      <td style={styles.td}>
+                        <select
+                          value={
+                            item.role
+                          }
+                          disabled={
+                            isUpdating
+                          }
+                          onChange={(
+                            event
+                          ) =>
+                            handleRoleChange(
+                              item.id,
+                              event.target
+                                .value
+                            )
+                          }
+                          style={
+                            styles.select
+                          }
+                        >
+                          <option value="learner">
+                            Learner
+                          </option>
 
-                          <div style={styles.small}>
-                            {item.profile.department}
-                          </div>
-                        </div>
-                      ) : (
-                        <span style={styles.muted}>
-                          Not completed
+                          <option value="tester">
+                            Tester
+                          </option>
+
+                          <option value="trainer">
+                            Trainer
+                          </option>
+
+                          <option value="admin">
+                            Admin
+                          </option>
+                        </select>
+                      </td>
+
+
+                      {/* STATUS */}
+                      <td style={styles.td}>
+                        <span
+                          style={
+                            item.is_active
+                              ? styles.activeBadge
+                              : styles.inactiveBadge
+                          }
+                        >
+                          {item.is_active
+                            ? "Active"
+                            : "Inactive"}
                         </span>
-                      )}
-                    </td>
+                      </td>
 
-                    <td style={styles.td}>
-                      <select
-                        value={item.role}
-                        disabled={
-                          updatingUserId ===
-                          item.id
-                        }
-                        onChange={(event) =>
-                          handleRoleChange(
-                            item.id,
-                            event.target.value
-                          )
-                        }
-                        style={styles.select}
-                      >
-                        <option value="learner">
-                          Learner
-                        </option>
 
-                        <option value="tester">
-                          Tester
-                        </option>
+                      {/* PROFILE */}
+                      <td style={styles.td}>
+                        {item.profile ? (
+                          <div>
+                            <strong>
+                              {
+                                item
+                                  .profile
+                                  .full_name
+                              }
+                            </strong>
 
-                        <option value="trainer">
-                          Trainer
-                        </option>
+                            {item
+                              .profile
+                              .designation && (
+                              <div
+                                style={
+                                  styles.small
+                                }
+                              >
+                                {
+                                  item
+                                    .profile
+                                    .designation
+                                }
+                              </div>
+                            )}
 
-                        <option value="admin">
-                          Admin
-                        </option>
-                      </select>
-                    </td>
-                  </tr>
-                ))}
+                            {item
+                              .profile
+                              .department && (
+                              <div
+                                style={
+                                  styles.small
+                                }
+                              >
+                                {
+                                  item
+                                    .profile
+                                    .department
+                                }
+                              </div>
+                            )}
+
+                            {item
+                              .profile
+                              .experience_years !==
+                              null &&
+                              item
+                                .profile
+                                .experience_years !==
+                                undefined && (
+                                <div
+                                  style={
+                                    styles.small
+                                  }
+                                >
+                                  Experience:{" "}
+                                  {
+                                    item
+                                      .profile
+                                      .experience_years
+                                  }{" "}
+                                  years
+                                </div>
+                              )}
+                          </div>
+                        ) : (
+                          <span
+                            style={
+                              styles.muted
+                            }
+                          >
+                            Not completed
+                          </span>
+                        )}
+                      </td>
+
+
+                      {/* ACTIONS */}
+                      <td style={styles.td}>
+                        <div
+                          style={
+                            styles.actions
+                          }
+                        >
+                          {/* ROLE STATUS */}
+                          <span
+                            style={
+                              styles.actionLabel
+                            }
+                          >
+                            Role
+                          </span>
+
+
+                          {/* ENABLE / DISABLE */}
+                          <button
+                            type="button"
+                            disabled={
+                              isUpdating
+                            }
+                            onClick={() =>
+                              handleStatusChange(
+                                item.id,
+                                !item.is_active
+                              )
+                            }
+                            style={
+                              item.is_active
+                                ? styles.disableButton
+                                : styles.enableButton
+                            }
+                          >
+                            {isUpdating
+                              ? "Updating..."
+                              : item.is_active
+                              ? "Disable"
+                              : "Activate"}
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -264,7 +457,7 @@ const styles = {
 
   infoText: {
     color: "#475569",
-    marginBottom: 0,
+    marginBottom: "0.5rem",
   },
 
   card: {
@@ -304,21 +497,80 @@ const styles = {
   th: {
     textAlign: "left",
     padding: "0.75rem",
-    borderBottom: "2px solid #e2e8f0",
+    borderBottom:
+      "2px solid #e2e8f0",
     whiteSpace: "nowrap",
   },
 
   td: {
     padding: "0.75rem",
-    borderBottom: "1px solid #e2e8f0",
+    borderBottom:
+      "1px solid #e2e8f0",
     verticalAlign: "top",
   },
 
   select: {
     padding: "0.5rem",
-    border: "1px solid #cbd5e1",
+    border:
+      "1px solid #cbd5e1",
     borderRadius: "6px",
     background: "#ffffff",
+    cursor: "pointer",
+  },
+
+  actions: {
+    display: "flex",
+    flexDirection: "column",
+    gap: "0.5rem",
+    minWidth: "110px",
+  },
+
+  actionLabel: {
+    fontSize: "0.75rem",
+    color: "#64748b",
+    fontWeight: 700,
+  },
+
+  disableButton: {
+    border:
+      "1px solid #dc2626",
+    background: "#ffffff",
+    color: "#dc2626",
+    padding: "0.5rem 0.7rem",
+    borderRadius: "6px",
+    fontWeight: 700,
+    cursor: "pointer",
+  },
+
+  enableButton: {
+    border:
+      "1px solid #15803d",
+    background: "#ffffff",
+    color: "#15803d",
+    padding: "0.5rem 0.7rem",
+    borderRadius: "6px",
+    fontWeight: 700,
+    cursor: "pointer",
+  },
+
+  activeBadge: {
+    display: "inline-block",
+    padding: "0.3rem 0.6rem",
+    borderRadius: "999px",
+    background: "#dcfce7",
+    color: "#166534",
+    fontSize: "0.75rem",
+    fontWeight: 700,
+  },
+
+  inactiveBadge: {
+    display: "inline-block",
+    padding: "0.3rem 0.6rem",
+    borderRadius: "999px",
+    background: "#fee2e2",
+    color: "#991b1b",
+    fontSize: "0.75rem",
+    fontWeight: 700,
   },
 
   small: {
